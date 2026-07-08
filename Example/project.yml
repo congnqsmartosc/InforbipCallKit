@@ -1,0 +1,44 @@
+name: InfobipCallKitExample
+options:
+  bundleIdPrefix: com.smartosc.infobip
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  InfobipCallKitExample:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: InfobipCallKitExample
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.smartosc.infobip.callkit.example
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: "NO"
+    info:
+      path: InfobipCallKitExample/Info.plist
+      properties:
+        CFBundleDisplayName: CallKit Example
+        # Required by InfobipCallKit — microphone + background audio for calls.
+        NSMicrophoneUsageDescription: "Microphone is used to make and receive calls."
+        UIBackgroundModes:
+          - audio
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate

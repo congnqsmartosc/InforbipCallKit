@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+
+# CocoaPods
+Pods/
+*.xcworkspace
+Podfile.lock
+
+# XcodeGen-generated (source of truth is Example/project.yml)
+Example/*.xcodeproj/
+
+# Secrets — never commit the demo API key
+**/Secrets.plist
+
+# SwiftPM
+.build/
+.swiftpm/
