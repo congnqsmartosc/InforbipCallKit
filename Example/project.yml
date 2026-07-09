@@ -13,11 +13,13 @@ settings:
     CODE_SIGN_STYLE: Automatic
 
 targets:
+  # Scene-based host (UISceneDelegate).
   InfobipCallKitExample:
     type: application
     platform: iOS
     deploymentTarget: "15.0"
     sources:
+      - path: Shared
       - path: InfobipCallKitExample
     settings:
       base:
@@ -28,7 +30,6 @@ targets:
       path: InfobipCallKitExample/Info.plist
       properties:
         CFBundleDisplayName: CallKit Example
-        # Required by InfobipCallKit — microphone + background audio for calls.
         NSMicrophoneUsageDescription: "Microphone is used to make and receive calls."
         UIBackgroundModes:
           - audio
@@ -42,3 +43,47 @@ targets:
             UIWindowSceneSessionRoleApplication:
               - UISceneConfigurationName: Default Configuration
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+
+  # Classic host (UIApplicationDelegate only — no UIApplicationSceneManifest).
+  InfobipCallKitExampleAppDelegate:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Shared
+      - path: AppDelegateExample
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.smartosc.infobip.callkit.example.appdelegate
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: "NO"
+    info:
+      path: AppDelegateExample/Info.plist
+      properties:
+        CFBundleDisplayName: CallKit Example (AppDelegate)
+        NSMicrophoneUsageDescription: "Microphone is used to make and receive calls."
+        UIBackgroundModes:
+          - audio
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+
+schemes:
+  InfobipCallKitExample:
+    build:
+      targets:
+        InfobipCallKitExample: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  InfobipCallKitExampleAppDelegate:
+    build:
+      targets:
+        InfobipCallKitExampleAppDelegate: all
+    run:
+      config: Debug
+    archive:
+      config: Release

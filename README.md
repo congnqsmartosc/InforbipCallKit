@@ -49,15 +49,61 @@ Add (the framework needs the mic and background audio during calls):
 
 ## Initialize the SDK
 
-Create one `InfobipCallCenter` and install it on your key window (e.g. in `SceneDelegate`):
+Create one `InfobipCallCenter` and keep it alive for the app's lifetime. It presents the calling
+UI on its own overlay window and resolves the active window scene automatically, so it works with
+**either** app lifecycle. `install(on:)` is optional — a hint for which window scene to attach to.
+
+**`UISceneDelegate`:**
 
 ```swift
 import InfobipCallKit
 
-let callCenter = InfobipCallCenter(config: InfobipCallConfig())
-callCenter.install(on: window)     // provides the window scene for the overlay call UI
-callCenter.hostDelegate = self     // optional: chat / feedback hand-offs
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+    private var callCenter: InfobipCallCenter!
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = /* your root VC */
+        window.makeKeyAndVisible()
+        self.window = window
+
+        callCenter = InfobipCallCenter(config: InfobipCallConfig())
+        callCenter.install(on: window)     // optional scene hint
+        callCenter.hostDelegate = self     // optional: chat / feedback hand-offs
+    }
+}
 ```
+
+**`UIApplicationDelegate` only** (no SceneDelegate, no `UIApplicationSceneManifest`):
+
+```swift
+import InfobipCallKit
+
+@main
+final class AppDelegate: UIResponder, UIApplicationDelegate {
+    var window: UIWindow?
+    private var callCenter: InfobipCallCenter!
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        callCenter = InfobipCallCenter(config: InfobipCallConfig())
+        callCenter.hostDelegate = self
+
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = /* your root VC */
+        window.makeKeyAndVisible()
+        self.window = window
+
+        callCenter.install(on: window)     // optional scene hint
+        return true
+    }
+}
+```
+
+> The Infobip RTC SDK itself (PushKit incoming calls, `InfobipSimulator`, tokens, media) is
+> independent of the scene lifecycle — both host styles are fully supported.
 
 `InfobipCallConfig` lets you override the `customData` key names, set a real APNs VoIP
 `pushConfigId`, and theme the UI:
@@ -147,6 +193,10 @@ xcodegen generate      # generates InfobipCallKitExample.xcodeproj
 pod install            # creates InfobipCallKitExample.xcworkspace
 open InfobipCallKitExample.xcworkspace
 ```
+
+Two schemes demonstrate both host lifecycles against the same shared UI:
+- **InfobipCallKitExample** — `UISceneDelegate`-based
+- **InfobipCallKitExampleAppDelegate** — classic `UIApplicationDelegate`-only (no scene manifest)
 
 The demo mints a token client-side for convenience (production apps must do this on a backend).
 Provide the Infobip App key at runtime — it is **not** committed:

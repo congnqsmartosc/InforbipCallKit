@@ -1,15 +1,23 @@
 platform :ios, '15.0'
 
-# MANDATORY: the Infobip RTC pod vendors a dynamic Swift/WebRTC binary.
+
 use_frameworks!
 
-target 'InfobipCallKitExample' do
-  # The local pod. Use the Rx subspec to also get `rx_activeSession`.
-  pod 'InfobipCallKit', :path => '../', :subspecs => ['Core', 'Rx']
+def infobip_call_kit_pods
 
-  # Client-parity pins — prove InfobipCallKit resolves within these ranges.
+  pod 'InfobipCallKit', '1.0'
   pod 'RxSwift', '6.9.0'
   pod 'SnapKit', '5.7.1'
   pod 'SDWebImage', '5.21.7'
   pod 'XCoordinator', '2.2.1'
+end
+
+# Scene-based host.
+target 'InfobipCallKitExample' do
+  infobip_call_kit_pods
+end
+
+# Classic UIApplicationDelegate-only host.
+target 'InfobipCallKitExampleAppDelegate' do
+  infobip_call_kit_pods
 end
