@@ -32,7 +32,7 @@ final class RingtonePlayer {
             if let url = Bundle.callKit.url(forResource: "ring", withExtension: "caf") {
                 AudioServicesCreateSystemSoundID(url as CFURL, &ringSoundID)
             } else {
-                print("[InfobipCallKit][RingtonePlayer] missing asset ring.caf")
+                CallLog.debug("missing asset ring.caf", category: "RingtonePlayer")
             }
         }
         playRingLoop()
@@ -62,7 +62,7 @@ final class RingtonePlayer {
             if let url = Bundle.callKit.url(forResource: "ringback", withExtension: "caf") {
                 AudioServicesCreateSystemSoundID(url as CFURL, &ringbackSoundID)
             } else {
-                print("[InfobipCallKit][RingtonePlayer] missing asset ringback.caf")
+                CallLog.debug("missing asset ringback.caf", category: "RingtonePlayer")
             }
         }
         playRingbackLoop()

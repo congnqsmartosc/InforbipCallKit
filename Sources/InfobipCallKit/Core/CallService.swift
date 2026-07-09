@@ -1,6 +1,7 @@
 import Foundation
 import InfobipRTC
 import PushKit
+import CallKit
 
 enum CallServiceError: LocalizedError {
     case notRegistered
@@ -19,6 +20,8 @@ struct Subscriber {
     let identity: String
     let displayName: String
     var token: String
+    /// The subscriber's own avatar, auto-forwarded to callees via `customData` on outgoing calls.
+    var imageURL: String?
 }
 
 /// The single facade that talks to the InfobipRTC SDK.
@@ -26,15 +29,25 @@ struct Subscriber {
 protocol CallServiceType: AnyObject {
     var subscriber: Subscriber? { get }
     var onIncomingCall: ((ActiveCall) -> Void)? { get set }
+    /// Fires when an incoming call is answered on the CallKit system UI — the client presents the
+    /// in-call screen for `call` (which is already accepting/established; do NOT call accept again).
+    var onCallAnswered: ((ActiveCall) -> Void)? { get set }
 
-    /// Store the logged-in subscriber (identity + display name + host-provided token).
-    func registerSubscriber(identity: String, displayName: String, token: String)
+    /// `true` when CallKit + real VoIP push is active (`config.isCallKitEnabled`).
+    var isCallKitEnabled: Bool { get }
+
+    /// Store the logged-in subscriber (identity + display name + host-provided token + avatar).
+    func registerSubscriber(identity: String, displayName: String, token: String, imageURL: String?)
 
     /// Replace the cached token (e.g. after refresh).
     func updateToken(_ token: String)
 
     /// Clear subscriber state (e.g. on logout) and tear down the incoming-call channel.
     func clearSubscriber()
+
+    /// Start the VoIP push registry at launch WITHOUT a token, so a killed-app push is caught.
+    /// No-op unless CallKit is enabled; safe to call multiple times.
+    func prepareForIncomingCalls()
 
     /// Open the channel that receives incoming calls for the registered subscriber.
     func registerForIncomingCalls() throws
@@ -47,62 +60,113 @@ protocol CallServiceType: AnyObject {
     func makeCall(destinationIdentity: String, customData: [String: String]) async throws -> ActiveCall
 }
 
+/// Tracks an incoming call reported to CallKit whose `ActiveCall` may not have arrived yet.
+final class PendingIncoming {
+    let uuid: UUID
+    let callId: String
+    var activeCall: ActiveCall?
+    var answerAction: CXAnswerCallAction?
+    var answered = false
+    var declineRequested = false
+
+    init(uuid: UUID, callId: String) {
+        self.uuid = uuid
+        self.callId = callId
+    }
+}
+
 final class CallService: NSObject, CallServiceType {
 
     private let config: InfobipCallConfig
     private var pushRegistry: PKPushRegistry?
+    private let callKit: CallKitManager?
+
+    var isCallKitEnabled: Bool { config.isCallKitEnabled }
 
     /// Push payloads keyed by callId — to retry handleIncomingCall when the SDK can't fetch the
     /// call within 3s ("Call did not arrive in 3 seconds") on the first call after app launch.
     private var pendingPayloads: [String: PKPushPayload] = [:]
     private var retriedCallIds: Set<String> = []
 
+    // CallKit state
+    private var incomingByCallId: [String: PendingIncoming] = [:]
+    private var outgoing: (uuid: UUID, call: ActiveCall)?
+    private var pendingPushCredentials: PKPushCredentials?
+
     private(set) var subscriber: Subscriber?
     var onIncomingCall: ((ActiveCall) -> Void)?
+    var onCallAnswered: ((ActiveCall) -> Void)?
 
     private var infobipRTC: InfobipRTC { getInfobipRTCInstance() }
 
     init(config: InfobipCallConfig) {
         self.config = config
+        self.callKit = config.isCallKitEnabled ? CallKitManager(config: config) : nil
         super.init()
+        wireCallKit()
+        // Create the real VoIP registry as early as possible so a killed-app push is delivered.
+        prepareForIncomingCalls()
     }
 
     // MARK: - Subscriber
 
-    func registerSubscriber(identity: String, displayName: String, token: String) {
-        subscriber = Subscriber(identity: identity, displayName: displayName, token: token)
-        log("registered subscriber \(identity)")
+    func registerSubscriber(identity: String, displayName: String, token: String, imageURL: String?) {
+        subscriber = Subscriber(identity: identity, displayName: displayName, token: token, imageURL: imageURL)
+        log("registered subscriber \(identity) displayName=\(displayName) hasImage=\(imageURL != nil)")
+        // If a VoIP token already arrived before the subscriber was known, bind push now.
+        enablePushIfPossible()
     }
 
     func updateToken(_ token: String) {
         subscriber?.token = token
+        log("token updated")
+        enablePushIfPossible()
     }
 
     func clearSubscriber() {
+        if let token = subscriber?.token, config.pushConfigId != nil {
+            infobipRTC.disablePushNotification(token)
+        }
         pushRegistry?.delegate = nil
         pushRegistry = nil
+        pendingPushCredentials = nil
         subscriber = nil
         log("cleared subscriber")
     }
 
     // MARK: - Incoming registration
 
+    func prepareForIncomingCalls() {
+        // Real APNs VoIP path only: a plain PKPushRegistry needs no token to receive pushes, so we
+        // can (and must, for killed-app launches) create it eagerly. The InfobipSimulator path needs
+        // the token and is created in registerForIncomingCalls().
+        guard isCallKitEnabled else { return }
+        guard pushRegistry == nil else { return }
+        let registry = PKPushRegistry(queue: .main)
+        registry.desiredPushTypes = [.voIP]
+        registry.delegate = self
+        pushRegistry = registry
+        log("prepared VoIP push registry (CallKit)")
+    }
+
     func registerForIncomingCalls() throws {
+        if isCallKitEnabled {
+            // Registry already exists (created in init / prepareForIncomingCalls). Binding the
+            // device token to Infobip happens once both the VoIP credentials and subscriber token
+            // are available (see enablePushIfPossible / didUpdate pushCredentials).
+            prepareForIncomingCalls()
+            enablePushIfPossible()
+            return
+        }
+
         guard let subscriber = subscriber else { throw CallServiceError.notRegistered }
 
-        // The SDK receives incoming calls over PushKit. When no APNs VoIP is configured
-        // (pushConfigId == nil) it uses InfobipSimulator: an active connection to Infobip that
-        // delivers calls while the app is foregrounded. Tear down any prior registry first so
-        // switching subscriber doesn't keep two live connections.
+        // Foreground dev path: InfobipSimulator is an active connection to Infobip that delivers
+        // calls while the app is foregrounded. Tear down any prior registry first.
         pushRegistry?.delegate = nil
         pushRegistry = nil
 
-        let registry: PKPushRegistry
-        if config.pushConfigId != nil {
-            registry = PKPushRegistry(queue: .main)
-        } else {
-            registry = InfobipSimulator(token: subscriber.token)
-        }
+        let registry = InfobipSimulator(token: subscriber.token)
         registry.desiredPushTypes = [.voIP]
         registry.delegate = self
         pushRegistry = registry
@@ -111,11 +175,29 @@ final class CallService: NSObject, CallServiceType {
 
     func handlePushNotification(_ payload: [String: String]) -> Bool {
         // Present for cross-platform (Android) API parity. On iOS, VoIP pushes are delivered as
-        // `PKPushPayload` objects through PushKit, which cannot be reconstructed from a plain
-        // dictionary — incoming calls are handled by the internal PKPushRegistry / InfobipSimulator
-        // (see `registerForIncomingCalls()`). Hosts wiring their own real APNs VoIP path should
-        // forward the raw `PKPushPayload` to the SDK from their `PKPushRegistryDelegate` instead.
+        // `PKPushPayload` objects through the pod's own PKPushRegistry — not a plain dictionary.
         return false
+    }
+
+    // MARK: - Push binding
+
+    private func enablePushIfPossible() {
+        guard config.pushConfigId != nil,
+              let subscriber = subscriber,
+              let credentials = pendingPushCredentials else { return }
+        enablePush(token: subscriber.token, credentials: credentials)
+    }
+
+    private func enablePush(token: String, credentials: PKPushCredentials) {
+        guard let configId = config.pushConfigId else { return }
+        #if DEBUG
+        let debug = true
+        #else
+        let debug = false
+        #endif
+        infobipRTC.enablePushNotification(token, pushCredentials: credentials, debug: debug, pushConfigId: configId) { [weak self] result in
+            self?.log("enablePushNotification status=\(result.status == .success ? "success" : "failure") message=\(result.message)")
+        }
     }
 
     // MARK: - Outgoing
@@ -123,27 +205,132 @@ final class CallService: NSObject, CallServiceType {
     func makeCall(destinationIdentity: String, customData: [String: String]) async throws -> ActiveCall {
         guard let subscriber = subscriber else { throw CallServiceError.notRegistered }
 
-        // The caller's own screen resolves the callee from the WebRTC endpoint (displayIdentifier
-        // → identity), so no local customData is needed here. The passed `customData` is forwarded
-        // to the callee so their incoming screen can show this caller's name/avatar.
         let activeCall = ActiveCall(outgoingCustomData: [:], customDataKeys: config.customDataKeys)
+
+        // Auto-forward the registered subscriber's own display info to the callee, so the host
+        // doesn't have to build customData by hand. Any keys the host passed explicitly win.
+        var forwarded: [String: String] = [:]
+        forwarded[config.customDataKeys.displayName] = subscriber.displayName
+        if let imageURL = subscriber.imageURL {
+            forwarded[config.customDataKeys.avatarURL] = imageURL
+        }
+        forwarded.merge(customData) { _, hostValue in hostValue }
+
+        log("makeCall → \(destinationIdentity) customData keys=\(forwarded.keys.sorted())")
 
         let request = CallWebrtcRequest(
             subscriber.token,
             destination: destinationIdentity,
             webrtcCallEventListener: activeCall
         )
-        let options = WebrtcCallOptions(customData: customData)
+        let options = WebrtcCallOptions(customData: forwarded)
 
         let call = try await MainActor.run {
             try infobipRTC.callWebrtc(request, options)
         }
         activeCall.attach(call)
+
+        if isCallKitEnabled {
+            let uuid = UUID(uuidString: activeCall.callId) ?? UUID()
+            outgoing = (uuid, activeCall)
+            callKit?.startOutgoingCall(uuid: uuid, handle: destinationIdentity)
+            observeOutgoingForCallKit(activeCall, uuid: uuid)
+        }
         return activeCall
     }
 
+    private func observeOutgoingForCallKit(_ call: ActiveCall, uuid: UUID) {
+        call.observe { [weak self] event in
+            guard let self = self else { return }
+            switch event {
+            case .ringing, .earlyMedia:
+                self.callKit?.reportOutgoingConnecting(uuid: uuid)
+            case .established:
+                self.callKit?.reportOutgoingConnected(uuid: uuid)
+            case .hangup(let reason), .error(let reason):
+                self.callKit?.reportCallEnded(uuid: uuid, reason: reason.isError ? .failed : .remoteEnded)
+                if self.outgoing?.uuid == uuid { self.outgoing = nil }
+            default:
+                break
+            }
+        }
+    }
+
+    // MARK: - CallKit action wiring
+
+    private func wireCallKit() {
+        guard let callKit = callKit else { return }
+
+        callKit.onAnswer = { [weak self] uuid, action in
+            self?.handleCallKitAnswer(uuid: uuid, action: action)
+        }
+        callKit.onEnd = { [weak self] uuid, action in
+            self?.handleCallKitEnd(uuid: uuid)
+            action.fulfill()
+        }
+        callKit.onMute = { [weak self] uuid, muted, action in
+            self?.callForUUID(uuid)?.setMuted(muted)
+            action.fulfill()
+        }
+        callKit.onStartCall = { _, action in
+            action.fulfill()   // the SDK call is already being placed by makeCall.
+        }
+        callKit.onReset = { [weak self] in
+            guard let self = self else { return }
+            self.incomingByCallId.values.forEach { $0.activeCall?.hangup() }
+            self.outgoing?.call.hangup()
+        }
+    }
+
+    private func handleCallKitAnswer(uuid: UUID, action: CXAnswerCallAction) {
+        guard let pending = pendingForUUID(uuid) else { action.fail(); return }
+        pending.answered = true
+        if let call = pending.activeCall {
+            call.accept()
+            action.fulfill()
+            onCallAnswered?(call)
+        } else {
+            // The SDK hasn't delivered the call yet — queue the answer and add a safety timeout.
+            pending.answerAction = action
+            let callId = pending.callId
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self, weak pending] in
+                guard let pending = pending, pending.activeCall == nil, pending.answerAction != nil else { return }
+                self?.log("answer timed out for callId=\(callId) — failing action")
+                pending.answerAction?.fail()
+                pending.answerAction = nil
+                self?.callKit?.reportCallEnded(uuid: uuid, reason: .failed)
+                self?.incomingByCallId[callId] = nil
+            }
+        }
+    }
+
+    private func handleCallKitEnd(uuid: UUID) {
+        if let pending = pendingForUUID(uuid) {
+            if let call = pending.activeCall {
+                if call.isEstablished { call.hangup() } else { call.decline() }
+            } else {
+                pending.declineRequested = true
+            }
+            incomingByCallId[pending.callId] = nil
+            return
+        }
+        if let outgoing = outgoing, outgoing.uuid == uuid {
+            outgoing.call.hangup()
+            self.outgoing = nil
+        }
+    }
+
+    private func pendingForUUID(_ uuid: UUID) -> PendingIncoming? {
+        incomingByCallId.values.first { $0.uuid == uuid }
+    }
+
+    private func callForUUID(_ uuid: UUID) -> ActiveCall? {
+        if let outgoing = outgoing, outgoing.uuid == uuid { return outgoing.call }
+        return pendingForUUID(uuid)?.activeCall
+    }
+
     private func log(_ message: String) {
-        print("[InfobipCallKit][CallService] \(message)")
+        CallLog.debug(message, category: "CallService")
     }
 }
 
@@ -153,13 +340,9 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
 
     func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
         log("didUpdate pushCredentials type=\(type.rawValue)")
-        guard type == .voIP, let configId = config.pushConfigId, let subscriber = subscriber else { return }
-        #if DEBUG
-        let debug = true
-        #else
-        let debug = false
-        #endif
-        infobipRTC.enablePushNotification(subscriber.token, pushCredentials: pushCredentials, debug: debug, pushConfigId: configId)
+        guard type == .voIP else { return }
+        pendingPushCredentials = pushCredentials
+        enablePushIfPossible()
     }
 
     // InfobipRTC (including InfobipSimulator) ONLY calls the completion-handler variant
@@ -182,13 +365,31 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
     private func handleIncomingPush(_ payload: PKPushPayload, type: PKPushType) {
         log("didReceiveIncomingPush type=\(type.rawValue) payload=\(payload.dictionaryPayload)")
         guard type == .voIP else { return }
+
         guard infobipRTC.isIncomingCall(payload) else {
             log("payload is NOT an incoming webrtc call — ignored")
+            // On the CallKit path iOS requires a report for every VoIP push; report then end it.
+            if isCallKitEnabled {
+                let uuid = UUID()
+                callKit?.reportIncomingCall(uuid: uuid, callerName: config.callKitDisplayName) { [weak self] _ in
+                    self?.callKit?.reportCallEnded(uuid: uuid, reason: .failed)
+                }
+            }
             return
         }
-        if let callId = payload.dictionaryPayload["callId"] as? String {
-            pendingPayloads[callId] = payload
+
+        let callId = (payload.dictionaryPayload["callId"] as? String) ?? UUID().uuidString
+        pendingPayloads[callId] = payload
+
+        if isCallKitEnabled {
+            // MUST report synchronously before completion() or iOS kills a push-launched app.
+            let uuid = UUID(uuidString: callId) ?? UUID()
+            let pending = PendingIncoming(uuid: uuid, callId: callId)
+            incomingByCallId[callId] = pending
+            let callerName = (payload.dictionaryPayload["callerName"] as? String) ?? config.callKitDisplayName
+            callKit?.reportIncomingCall(uuid: uuid, callerName: callerName)
         }
+
         infobipRTC.handleIncomingCall(payload, self)
     }
 
@@ -205,8 +406,47 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
             customDataKeys: config.customDataKeys
         )
         watchForEarlyDeath(of: activeCall)
+
         DispatchQueue.main.async { [weak self] in
-            self?.onIncomingCall?(activeCall)
+            guard let self = self else { return }
+            if self.isCallKitEnabled {
+                self.attachToPending(activeCall)
+            }
+            // Bind the session for host observers (banner presentation is suppressed on the CallKit
+            // path inside the client — it only presents once the call is answered).
+            self.onIncomingCall?(activeCall)
+        }
+    }
+
+    /// Correlate a freshly-delivered `ActiveCall` with the CallKit call reported at push time, and
+    /// resolve any answer/decline the user already made on the system UI.
+    private func attachToPending(_ activeCall: ActiveCall) {
+        let pending = incomingByCallId[activeCall.callId] ?? incomingByCallId.values.first(where: { $0.activeCall == nil })
+        guard let pending = pending else { return }
+        pending.activeCall = activeCall
+
+        callKit?.updateCaller(uuid: pending.uuid, name: activeCall.counterpartName)
+
+        // Report remote-initiated ends to CallKit so the system UI dismisses.
+        activeCall.observe { [weak self] event in
+            guard let self = self else { return }
+            switch event {
+            case .hangup(let reason), .error(let reason):
+                self.callKit?.reportCallEnded(uuid: pending.uuid, reason: reason.isError ? .failed : .remoteEnded)
+                self.incomingByCallId[pending.callId] = nil
+            default:
+                break
+            }
+        }
+
+        if pending.declineRequested {
+            activeCall.decline()
+            incomingByCallId[pending.callId] = nil
+        } else if pending.answered {
+            activeCall.accept()
+            pending.answerAction?.fulfill()
+            pending.answerAction = nil
+            onCallAnswered?(activeCall)
         }
     }
 

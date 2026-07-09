@@ -4,6 +4,9 @@ import XCoordinator
 enum FreeCallMode {
     /// Incoming call. `autoAccept == true` when the user already tapped accept on the banner.
     case incoming(ActiveCall, autoAccept: Bool)
+    /// Incoming call already answered on the CallKit system UI — show the in-call screen without
+    /// accepting again.
+    case incomingAnswered(ActiveCall)
     /// Outgoing call (already created via the client).
     case outgoing(ActiveCall)
 }

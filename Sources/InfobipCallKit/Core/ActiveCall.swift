@@ -6,8 +6,12 @@ enum CallEvent {
     case ringing
     case earlyMedia
     case established
-    case hangup(reason: String)
-    case error(message: String)
+    /// Cuộc gọi kết thúc bình thường (SDK onHangup) — kèm lý do đã map sang `CallEndReason`.
+    case hangup(CallEndReason)
+    /// Cuộc gọi kết thúc do lỗi (SDK onError) — `CallEndReason.isError == true`.
+    case error(CallEndReason)
+    /// Chất lượng mạng đổi (SDK NetworkQualityEventListener).
+    case networkQualityChanged(InfobipNetworkQuality)
     /// Trạng thái điều khiển local (mute/loa) đổi — để mọi màn đang mở cập nhật icon.
     case muteChanged(Bool)
     case speakerChanged(Bool)
@@ -44,6 +48,7 @@ final class ActiveCall: NSObject {
         self.customDataKeys = customDataKeys
         super.init()
         incomingCall.webrtcCallEventListener = self
+        incomingCall.networkQualityEventListener = self
         incomingCall.audioDeviceManager.audioDeviceEventListener = self
     }
 
@@ -58,6 +63,7 @@ final class ActiveCall: NSObject {
 
     func attach(_ call: Call) {
         self.call = call
+        call.networkQualityEventListener = self
         call.audioDeviceManager.audioDeviceEventListener = self
     }
 
@@ -123,7 +129,8 @@ final class ActiveCall: NSObject {
             // sẽ xác nhận lại sau — trùng cũng vô hại).
             emit(.audioRouteChanged(Self.option(for: device)))
         } catch {
-            emit(.error(message: error.localizedDescription))
+            // Lỗi thao tác local — không kết thúc cuộc gọi, chỉ log.
+            CallLog.debug("selectAudioRoute failed: \(error.localizedDescription)", category: "ActiveCall")
         }
     }
 
@@ -197,7 +204,8 @@ final class ActiveCall: NSObject {
             try call.mute(muted)
             emit(.muteChanged(muted))
         } catch {
-            emit(.error(message: error.localizedDescription))
+            // Lỗi thao tác local — không kết thúc cuộc gọi, chỉ log.
+            CallLog.debug("setMuted(\(muted)) failed: \(error.localizedDescription)", category: "ActiveCall")
         }
     }
 
@@ -240,6 +248,16 @@ extension ActiveCall: AudioDeviceEventListener {
     func onAvailableAudioDevicesChanged(_ availableAudioDevicesChangedEvent: AvailableAudioDevicesChangedEvent) {}
 }
 
+// MARK: - NetworkQualityEventListener
+
+extension ActiveCall: NetworkQualityEventListener {
+
+    func onNetworkQualityChanged(_ networkQualityChangedEvent: NetworkQualityChangedEvent) {
+        let quality = InfobipNetworkQuality(rawValue: networkQualityChangedEvent.networkQuality.rawValue) ?? .fair
+        emit(.networkQualityChanged(quality))
+    }
+}
+
 // MARK: - WebrtcCallEventListener
 
 extension ActiveCall: WebrtcCallEventListener {
@@ -249,13 +267,19 @@ extension ActiveCall: WebrtcCallEventListener {
     func onEstablished(_ callEstablishedEvent: CallEstablishedEvent) { emit(.established) }
 
     func onHangup(_ callHangupEvent: CallHangupEvent) {
-        print("[InfobipCallKit][ActiveCall] hangup: \(callHangupEvent.errorCode)")
-        emit(.hangup(reason: callHangupEvent.errorCode.name))
+        let reason = Self.endReason(from: callHangupEvent.errorCode, isError: false)
+        CallLog.debug("onHangup code=\(reason.code) name=\(reason.name)", category: "ActiveCall")
+        emit(.hangup(reason))
     }
 
     func onError(_ errorEvent: ErrorEvent) {
-        print("[InfobipCallKit][ActiveCall] error: \(errorEvent.errorCode)")
-        emit(.error(message: errorEvent.errorCode.message))
+        let reason = Self.endReason(from: errorEvent.errorCode, isError: true)
+        CallLog.debug("onError code=\(reason.code) name=\(reason.name) message=\(reason.message)", category: "ActiveCall")
+        emit(.error(reason))
+    }
+
+    private static func endReason(from errorCode: ErrorCode, isError: Bool) -> CallEndReason {
+        CallEndReason(code: errorCode.id, name: errorCode.name, message: errorCode.message, isError: isError)
     }
 
     // Các sự kiện video / reconnect không dùng trong POC audio-only.

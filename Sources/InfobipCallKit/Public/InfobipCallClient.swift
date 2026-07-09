@@ -36,7 +36,15 @@ public final class ObservationToken {
 /// Delegate variant of the active-session stream (see also ``InfobipCallClient/observeSession(_:)``
 /// and the optional RxSwift extension `rx_activeSession`).
 public protocol InfobipCallClientDelegate: AnyObject {
+    /// Called on every `activeSession` change (the latest state snapshot).
     func callClient(_ client: InfobipCallClient, didUpdate session: CallSession?)
+    /// Called for each discrete call event (start/end, end reason, signal quality, control
+    /// changes). Has a default no-op implementation, so it is optional to adopt.
+    func callClient(_ client: InfobipCallClient, didReceive event: InfobipCallEvent)
+}
+
+public extension InfobipCallClientDelegate {
+    func callClient(_ client: InfobipCallClient, didReceive event: InfobipCallEvent) {}
 }
 
 /// The public calling API — a Swift-idiomatic mirror of the Android `InfobipCallClient` interface.
@@ -55,15 +63,29 @@ public protocol InfobipCallClient: AnyObject {
     @discardableResult
     func observeSession(_ handler: @escaping (CallSession?) -> Void) -> ObservationToken
 
+    /// Closure observer of the discrete call-event stream (see ``InfobipCallEvent``). Unlike
+    /// ``observeSession(_:)`` it does not replay a current value — it only fires on new events.
+    @discardableResult
+    func observeEvents(_ handler: @escaping (InfobipCallEvent) -> Void) -> ObservationToken
+
     /// Register the logged-in user. `token` must be obtained by the host app (typically from your
-    /// backend calling Infobip `POST /webrtc/1/token`).
-    func registerSubscriber(identity: String, displayName: String, token: String) async throws
+    /// backend calling Infobip `POST /webrtc/1/token`). `imageURL` is the subscriber's own avatar;
+    /// when set, the framework auto-forwards the subscriber's `displayName` + `imageURL` in the
+    /// `customData` of outgoing calls so the callee's screen shows this caller — the host no longer
+    /// has to build `customData` by hand.
+    func registerSubscriber(identity: String, displayName: String, token: String, imageURL: String?) async throws
 
     /// Replace the cached subscriber token (e.g. after refresh).
     func updateToken(_ token: String)
 
     /// Clear subscriber state (e.g. on logout).
     func clearSubscriber()
+
+    /// Start the VoIP push registry at app launch **before** a token is available, so a call that
+    /// launched the app from a killed state is still delivered. Call this synchronously from
+    /// `application(_:didFinishLaunchingWithOptions:)` when using CallKit / real VoIP push
+    /// (`pushConfigId` set). No-op on the foreground `InfobipSimulator` dev path.
+    func prepareForIncomingCalls()
 
     /// Open the channel that receives incoming calls.
     func registerForIncomingCalls() async throws
@@ -88,6 +110,11 @@ public extension InfobipCallClient {
     /// Convenience overload matching the Android default argument.
     func startOutgoingCall(destinationIdentity: String) async throws -> CallSession {
         try await startOutgoingCall(destinationIdentity: destinationIdentity, customData: [:])
+    }
+
+    /// Convenience overload without a subscriber avatar (back-compatible with the original API).
+    func registerSubscriber(identity: String, displayName: String, token: String) async throws {
+        try await registerSubscriber(identity: identity, displayName: displayName, token: token, imageURL: nil)
     }
 }
 

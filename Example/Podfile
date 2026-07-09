@@ -5,7 +5,7 @@ use_frameworks!
 
 def infobip_call_kit_pods
 
-  pod 'InfobipCallKit', '1.0'
+  pod 'InfobipCallKit', :path => '../'
   pod 'RxSwift', '6.9.0'
   pod 'SnapKit', '5.7.1'
   pod 'SDWebImage', '5.21.7'

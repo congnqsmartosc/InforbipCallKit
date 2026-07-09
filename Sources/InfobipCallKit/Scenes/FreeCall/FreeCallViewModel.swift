@@ -32,6 +32,8 @@ final class FreeCallViewModel {
     private let call: ActiveCall
     private let router: UnownedRouter<CallRoute>
     private let autoAccept: Bool
+    /// The call was already answered elsewhere (CallKit) — enter the in-call screen without accepting.
+    private let alreadyAnswered: Bool
 
     private var phase: Phase = .connecting
     private var observerId: UUID?
@@ -41,9 +43,10 @@ final class FreeCallViewModel {
     /// Người dùng tự bấm kết thúc -> điều hướng ngay; bên kia ngắt máy -> giữ màn 2s rồi tự thoát.
     private var didHangUpLocally = false
 
-    init(call: ActiveCall, autoAccept: Bool, router: UnownedRouter<CallRoute>) {
+    init(call: ActiveCall, autoAccept: Bool, alreadyAnswered: Bool = false, router: UnownedRouter<CallRoute>) {
         self.call = call
         self.autoAccept = autoAccept
+        self.alreadyAnswered = alreadyAnswered
         self.router = router
 
         observerId = call.observe { [weak self] event in
@@ -65,7 +68,10 @@ final class FreeCallViewModel {
         }
         switch call.direction {
         case .incoming:
-            if autoAccept {
+            if alreadyAnswered {
+                // Answered on CallKit — the SDK is already accepting; just show connecting.
+                setPhase(.connecting, status: "Đang kết nối…")
+            } else if autoAccept {
                 setPhase(.connecting, status: "Đang kết nối…")
                 call.accept()
             } else {
@@ -116,7 +122,7 @@ final class FreeCallViewModel {
     // MARK: - Call events
 
     private func handle(_ event: CallEvent) {
-        print("[InfobipCallKit][FreeCallVM] event=\(event) phase=\(phase) direction=\(call.direction)")
+        CallLog.debug("event=\(event) phase=\(phase) direction=\(call.direction)", category: "FreeCallVM")
         switch event {
         case .ringing, .earlyMedia:
             if call.direction == .outgoing {
@@ -125,6 +131,9 @@ final class FreeCallViewModel {
 
         case .established:
             enterEstablished()
+
+        case .networkQualityChanged:
+            break   // hiển thị chất lượng mạng do host lo; UI trong pod không dùng.
 
         case .muteChanged(let muted):
             onMuteChange?(muted)
@@ -181,13 +190,13 @@ final class FreeCallViewModel {
 
         // Mình bấm kết thúc -> đi ngay. Bên kia ngắt -> giữ màn "đã kết thúc" 2s rồi tự thoát.
         let delay: TimeInterval = didHangUpLocally ? 0 : 2
-        print("[InfobipCallKit][FreeCallVM] finish wasEstablished=\(wasEstablished) local=\(didHangUpLocally) route=\(route) delay=\(delay)")
+        CallLog.debug("finish wasEstablished=\(wasEstablished) local=\(didHangUpLocally) route=\(route) delay=\(delay)", category: "FreeCallVM")
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self else {
-                print("[InfobipCallKit][FreeCallVM] finish: view model deallocated before routing")
+                CallLog.debug("finish: view model deallocated before routing", category: "FreeCallVM")
                 return
             }
-            print("[InfobipCallKit][FreeCallVM] triggering route \(route)")
+            CallLog.debug("triggering route \(route)", category: "FreeCallVM")
             self.router.trigger(route)
         }
     }

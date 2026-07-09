@@ -16,8 +16,15 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, InfobipCallHostDele
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         // 1. Create the call center and (optionally) hint it at the host window.
-        callCenter = InfobipCallCenter(config: InfobipCallConfig())
+        //    Set `pushConfigId` (Infobip portal) to enable CallKit + background/locked/killed calls.
+        callCenter = InfobipCallCenter(config: InfobipCallConfig(
+            // pushConfigId: "your-infobip-push-config-id",
+            callKitDisplayName: "CallKit Example"
+        ))
         callCenter.hostDelegate = self
+        // Start listening for VoIP pushes at launch (before any token) so a killed-app launch is
+        // delivered. No-op unless CallKit/pushConfigId is set.
+        callCenter.client.prepareForIncomingCalls()
 
         // 2. Classic AppDelegate window setup.
         let window = UIWindow(frame: UIScreen.main.bounds)

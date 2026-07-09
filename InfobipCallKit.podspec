@@ -33,7 +33,7 @@ Pod::Spec.new do |s|
         'Resources/**/*.caf'
       ]
     }
-    c.frameworks = 'UIKit', 'PushKit', 'AVFoundation', 'AudioToolbox'
+    c.frameworks = 'UIKit', 'PushKit', 'CallKit', 'AVFoundation', 'AudioToolbox'
 
     c.dependency 'InfobipRTC',   '~> 2.6.9'   # binary xcframework; bundles WebRTC on CocoaPods
     c.dependency 'SnapKit',      '~> 5.6'     # covers client 5.6.0–5.7.1

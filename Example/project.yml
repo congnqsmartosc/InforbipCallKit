@@ -23,9 +23,14 @@ targets:
       - path: InfobipCallKitExample
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.smartosc.infobip.callkit.example
+        # Matches the App ID that owns the VoIP certificate + Infobip pushConfigId.
+        PRODUCT_BUNDLE_IDENTIFIER: com.smartosc.infobip.call
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: "NO"
+        # Required for real VoIP push + CallKit (background/locked/killed incoming).
+        CODE_SIGN_ENTITLEMENTS: InfobipCallKitExample/InfobipCallKitExample.entitlements
+        CODE_SIGN_STYLE: Automatic
+        # DEVELOPMENT_TEAM: XXXXXXXXXX   # optional; or pick your team in Xcode ▸ Signing & Capabilities
     info:
       path: InfobipCallKitExample/Info.plist
       properties:
@@ -33,6 +38,7 @@ targets:
         NSMicrophoneUsageDescription: "Microphone is used to make and receive calls."
         UIBackgroundModes:
           - audio
+          - voip
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
@@ -57,6 +63,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.smartosc.infobip.callkit.example.appdelegate
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: "NO"
+        CODE_SIGN_ENTITLEMENTS: AppDelegateExample/AppDelegateExample.entitlements
+        # DEVELOPMENT_TEAM: XXXXXXXXXX   # set your Team ID for device builds
     info:
       path: AppDelegateExample/Info.plist
       properties:
@@ -64,6 +72,7 @@ targets:
         NSMicrophoneUsageDescription: "Microphone is used to make and receive calls."
         UIBackgroundModes:
           - audio
+          - voip
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:

@@ -112,9 +112,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 InfobipCallConfig(
     pushConfigId: nil,                                     // nil = foreground InfobipSimulator mode
     customDataKeys: .init(displayName: "displayName", avatarURL: "avatarUrl"),
-    theme: InfobipCallTheme(accent: .systemTeal)
+    theme: InfobipCallTheme(accent: .systemTeal),
+    isLoggingEnabled: true                                 // DEBUG-only `[InfobipCallKit][…]` logs
 )
 ```
+
+`isLoggingEnabled` (default `true`) prints `[InfobipCallKit][…]` trace logs to help you debug the
+calling flow. Logs are additionally compiled out of Release builds, so production apps never see
+them regardless of the flag — set `false` to silence them in DEBUG too.
 
 ## Register the user
 
@@ -123,17 +128,29 @@ Obtain a WebRTC token from **your backend** (which calls Infobip
 
 ```swift
 let token = try await MyBackend.fetchWebRTCToken(identity: "driver")
-try await callCenter.client.registerSubscriber(identity: "driver", displayName: "Nguyễn Văn Nam", token: token)
+try await callCenter.client.registerSubscriber(
+    identity: "driver",
+    displayName: "Nguyễn Văn Nam",
+    token: token,
+    imageURL: "https://…/me.jpg"      // the subscriber's own avatar (optional)
+)
 try await callCenter.client.registerForIncomingCalls()
 
 // on token refresh:  callCenter.client.updateToken(newToken)
 // on logout:         callCenter.client.clearSubscriber()
 ```
 
+The framework never mints tokens — your backend does. `pushConfigId` (on `InfobipCallConfig`)
+stays host-provided too.
+
 ## Make / receive calls
 
 ```swift
-// Outgoing — customData is forwarded to the callee for their incoming screen.
+// The registered subscriber's displayName + imageURL are auto-forwarded to the callee, so a
+// plain call already shows the right caller on their incoming screen:
+try await callCenter.client.startOutgoingCall(destinationIdentity: "customer")
+
+// …or pass customData explicitly to override / add fields (host values win over auto-forwarded):
 try await callCenter.client.startOutgoingCall(
     destinationIdentity: "customer",
     customData: ["displayName": "Nguyễn Văn Nam", "avatarUrl": "https://…/a.jpg"]
@@ -173,6 +190,78 @@ callCenter.client.rx_activeSession
     .subscribe(onNext: { session in … })
     .disposed(by: bag)
 ```
+
+## Observe call events
+
+Alongside the `activeSession` state, the SDK emits discrete **`InfobipCallEvent`**s for every
+signal it receives — call start/end (with a structured end reason), connection/signal quality, and
+mute / speaker / audio-route changes. Delivered the same three ways as state:
+
+```swift
+// delegate (optional method — default no-op)
+func callClient(_ client: InfobipCallClient, didReceive event: InfobipCallEvent) {
+    switch event {
+    case .started(let session):            // outgoing placed / incoming received
+    case .ringing, .connecting, .established:
+    case .ended(let reason):               // reason.name e.g. "NORMAL_HANGUP" / "NO_ANSWER", .code, .message, .isError
+    case .networkQualityChanged(let q):    // .bad … .excellent
+    case .muteChanged(let m):
+    case .speakerChanged(let on):
+    case .audioRouteChanged(let name):
+    }
+}
+
+// closure
+let token = callCenter.client.observeEvents { event in … }   // retain `token`
+
+// RxSwift (requires the `Rx` subspec)
+callCenter.client.rx_callEvents.subscribe(onNext: { event in … }).disposed(by: bag)
+```
+
+`CallSession` also carries the latest `networkQuality`, and (when `status == .ended`) the
+`endReason`, for consumers that only observe state.
+
+## Background, locked & killed-app calls (CallKit + VoIP push)
+
+By default (`pushConfigId == nil`) the framework receives incoming calls only while the app is
+**foregrounded** (via the Infobip `InfobipSimulator` socket) and shows its own in-app banner — ideal
+for development. To ring when the app is **backgrounded, locked, or killed**, enable real APNs VoIP
+push, and the framework automatically drives **CallKit** (system incoming/outgoing UI) for you.
+
+**1. Provision (once):**
+- Apple Developer → App ID with **Push Notifications**; create a **VoIP Services Certificate**
+  (`.p12`).
+- Infobip → create a WebRTC push configuration with that `.p12`; the response `id` is your
+  **`pushConfigId`**.
+
+**2. Host capabilities:** add the **Push Notifications** capability (`aps-environment` entitlement)
+and set `UIBackgroundModes` to include **`voip`** (plus `audio`). See `Example/*/*.entitlements` and
+`Example/project.yml`.
+
+**3. Configure & boot early:**
+```swift
+// In application(_:didFinishLaunchingWithOptions:) / scene(_:willConnectTo:)
+callCenter = InfobipCallCenter(config: InfobipCallConfig(
+    pushConfigId: "your-infobip-push-config-id",   // turns CallKit on
+    callKitDisplayName: "My App",                  // shown on the system call UI
+    ringtoneSound: "ring.caf"                       // optional
+))
+callCenter.client.prepareForIncomingCalls()        // MUST be called synchronously at launch so a
+                                                    // killed-app VoIP push is caught
+```
+
+**4. Keep the binding alive:** persist the logged-in identity and, on every launch, fetch a fresh
+token and call `registerSubscriber(...)` + `registerForIncomingCalls()`. A **killed-app incoming
+call needs no token** (the SDK handles the push payload directly); the token is only needed to
+enable push and to place outgoing calls.
+
+When CallKit is on, incoming calls ring through the **system UI** (even in the foreground — no custom
+banner), the user answers/declines there, and the framework presents its in-call screen once the app
+is active. Outgoing calls show the system green pill / lock-screen controls / Recents. The
+`activeSession` state and `InfobipCallEvent` stream behave the same in both modes.
+
+> The framework deliberately does **not** forward CallKit's `didActivate` audio session — the Infobip
+> RTC SDK owns and configures `AVAudioSession` itself.
 
 ## Host hand-offs
 

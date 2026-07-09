@@ -40,6 +40,12 @@ public struct CallSession: Equatable {
     public internal(set) var isMuted: Bool
     public internal(set) var isSpeakerOn: Bool
     public internal(set) var durationSeconds: Int
+
+    /// Latest connection quality reported by the SDK, if any has been observed yet.
+    public internal(set) var networkQuality: InfobipNetworkQuality?
+
+    /// Why the call ended. Non-nil only when `status == .ended`.
+    public internal(set) var endReason: CallEndReason?
 }
 
 extension CallSession {
@@ -54,5 +60,7 @@ extension CallSession {
         self.isMuted = activeCall.isMuted
         self.isSpeakerOn = activeCall.isSpeakerOn
         self.durationSeconds = activeCall.durationSeconds
+        self.networkQuality = nil
+        self.endReason = nil
     }
 }

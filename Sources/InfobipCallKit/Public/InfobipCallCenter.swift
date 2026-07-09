@@ -27,8 +27,14 @@ public final class InfobipCallCenter {
     private weak var hostWindow: UIWindow?
     private var callWindow: UIWindow?
 
+    /// A call answered on CallKit while the app wasn't foreground-active yet — its in-call screen is
+    /// presented once the app becomes active (see `presentDeferredAnsweredCallIfNeeded`).
+    private var deferredAnsweredCall: ActiveCall?
+
     public init(config: InfobipCallConfig = InfobipCallConfig()) {
+        CallLog.isEnabled = config.isLoggingEnabled
         CallTheme.current = config.theme
+        CallLog.debug("InfobipCallCenter initialized (pushConfigId=\(config.pushConfigId ?? "nil"))", category: "Center")
 
         let service = CallService(config: config)
         let impl = InfobipCallClientImpl(service: service, config: config)
@@ -40,9 +46,20 @@ public final class InfobipCallCenter {
         coordinator.onRetry = { [weak self] _ in
             Task { @MainActor in _ = try? await self?.impl.retryLastCall() }
         }
-        impl.onPresentCall = { [weak self] call, isIncoming in
-            self?.presentCall(call, isIncoming: isIncoming)
+        impl.onPresentCall = { [weak self] call, presentation in
+            self?.present(call, presentation)
         }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     /// Provide the host's key window once (typically from `SceneDelegate`). Used to derive the
@@ -53,15 +70,33 @@ public final class InfobipCallCenter {
 
     // MARK: - Presentation
 
-    // Always invoked on the main thread (from the client's main-dispatched incoming callback and
-    // its `MainActor.run` outgoing path).
-    private func presentCall(_ call: ActiveCall, isIncoming: Bool) {
-        showCallUI()
-        if isIncoming {
+    // Always invoked on the main thread (from the client's main-dispatched callbacks and its
+    // `MainActor.run` outgoing path).
+    private func present(_ call: ActiveCall, _ presentation: InfobipCallClientImpl.Presentation) {
+        switch presentation {
+        case .incomingBanner:
+            showCallUI()
             coordinator.trigger(.incomingCall(call))
-        } else {
+        case .outgoing:
+            showCallUI()
             coordinator.trigger(.freeCall(.outgoing(call)))
+        case .incomingAnswered:
+            // Answered on CallKit. Show the in-call screen only when the app is foreground-active;
+            // otherwise defer until it becomes active (killed/locked answer has no scene yet).
+            if UIApplication.shared.applicationState == .active {
+                showCallUI()
+                coordinator.trigger(.freeCall(.incomingAnswered(call)))
+            } else {
+                deferredAnsweredCall = call
+            }
         }
+    }
+
+    @objc private func appDidBecomeActive() {
+        guard let call = deferredAnsweredCall else { return }
+        deferredAnsweredCall = nil
+        showCallUI()
+        coordinator.trigger(.freeCall(.incomingAnswered(call)))
     }
 
     private func showCallUI() {

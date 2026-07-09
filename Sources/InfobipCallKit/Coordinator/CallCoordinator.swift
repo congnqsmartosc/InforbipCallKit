@@ -155,13 +155,21 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
     private func showFreeCall(mode: FreeCallMode) -> NavigationTransition {
         let call: ActiveCall
         let autoAccept: Bool
+        let alreadyAnswered: Bool
         switch mode {
         case .incoming(let incomingCall, let accept):
             call = incomingCall
             autoAccept = accept
+            alreadyAnswered = false
+        case .incomingAnswered(let answeredCall):
+            // Answered on CallKit already — show the in-call screen without re-accepting.
+            call = answeredCall
+            autoAccept = false
+            alreadyAnswered = true
         case .outgoing(let outgoingCall):
             call = outgoingCall
             autoAccept = false
+            alreadyAnswered = false
             // Ringback "beep… beep…" while the callee's phone rings; stops on media/connect/end.
             call.observe { [weak self] event in
                 switch event {
@@ -175,7 +183,7 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
             }
         }
 
-        let viewModel = FreeCallViewModel(call: call, autoAccept: autoAccept, router: unownedRouter)
+        let viewModel = FreeCallViewModel(call: call, autoAccept: autoAccept, alreadyAnswered: alreadyAnswered, router: unownedRouter)
         let vc = FreeCallViewController(viewModel: viewModel)
 
         if rootViewController.presentedViewController != nil {
