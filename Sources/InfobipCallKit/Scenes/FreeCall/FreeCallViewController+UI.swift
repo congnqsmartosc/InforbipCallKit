@@ -35,10 +35,11 @@ extension FreeCallViewController {
         nameLabel.textColor = .appTextPrimary
         nameLabel.textAlignment = .center
 
-        let controlStack = UIStackView(arrangedSubviews: [speakerControl, muteControl, messageControl])
+        let controlStack = UIStackView(arrangedSubviews: [speakerControl, muteControl])
         controlStack.axis = .horizontal
-        controlStack.distribution = .equalSpacing
+        controlStack.distribution = .fill
         controlStack.alignment = .top
+        controlStack.spacing = 72
 
         speakerControl.configure(icon: UIImage(systemName: "speaker.wave.2.fill"), caption: "Speaker")
         muteControl.configureToggle(
@@ -47,7 +48,6 @@ extension FreeCallViewController {
             offCaption: "Mute",
             onCaption: "Unmute"
         )
-        messageControl.configure(icon: UIImage(systemName: "message.fill"), caption: "Message")
 
         declineButton.configure(icon: UIImage(systemName: "xmark"), background: .appDecline, pointSize: 26)
         acceptButton.configure(icon: UIImage(systemName: "phone.fill"), background: .appAccept, pointSize: 26)
@@ -80,7 +80,7 @@ extension FreeCallViewController {
             make.leading.trailing.equalTo(view.safeAreaLayoutGuide).inset(24)
         }
         controlStack.snp.makeConstraints { make in
-            make.leading.trailing.equalTo(view.safeAreaLayoutGuide).inset(48)
+            make.centerX.equalToSuperview()
             make.bottom.equalTo(actionStack.snp.top).offset(-44)
         }
         actionStack.snp.makeConstraints { make in

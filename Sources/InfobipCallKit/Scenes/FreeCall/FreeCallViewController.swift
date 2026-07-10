@@ -1,7 +1,7 @@
 import UIKit
 import SDWebImage
 
-/// Màn cuộc gọi Free call: tiêu đề + avatar + tên + hàng điều khiển (Speaker/Mute/Message)
+/// Màn cuộc gọi Free call: tiêu đề + avatar + tên + hàng điều khiển (Speaker/Mute)
 /// + nút hành động. Toàn bộ state (pha gọi, đồng hồ, mute/loa) do FreeCallViewModel cấp;
 /// layout tách sang FreeCallViewController+UI.swift.
 final class FreeCallViewController: UIViewController {
@@ -17,7 +17,6 @@ final class FreeCallViewController: UIViewController {
 
     let speakerControl = CallControlItem()
     let muteControl = CallControlItem()
-    let messageControl = CallControlItem()
 
     let declineButton = CircleIconButton(diameter: 68)
     let acceptButton = CircleIconButton(diameter: 68)
@@ -81,7 +80,6 @@ final class FreeCallViewController: UIViewController {
 
         speakerControl.onTap = { [weak self] in self?.viewModel.openAudioRoutes() }
         muteControl.onTap = { [weak self] in self?.viewModel.toggleMute() }
-        messageControl.onTap = { [weak self] in self?.viewModel.openChat() }
         declineButton.addTarget(self, action: #selector(tapEnd), for: .touchUpInside)
         acceptButton.addTarget(self, action: #selector(tapAnswer), for: .touchUpInside)
     }
