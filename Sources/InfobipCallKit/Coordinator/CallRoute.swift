@@ -28,8 +28,6 @@ enum CallRoute: Route {
 
     // Termination
     case cancelCall                               // ended before connecting -> just close
-    case endCall                                  // connected call ended -> feedback screen
-    case finishCall                               // close feedback -> tear down
     case callUnreachable(name: String, destinationIdentity: String)  // outgoing refused/no-answer
     case retryCall(destinationIdentity: String)   // redial from the unreachable screen
     case backToHome                               // close current screen -> tear down

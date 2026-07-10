@@ -179,7 +179,8 @@ final class FreeCallViewModel {
 
         let route: CallRoute
         if wasEstablished {
-            route = .endCall
+            // Connected call ended — just tear down (no post-call feedback screen).
+            route = .backToHome
         } else if didCancelLocally || call.direction == .incoming {
             // Mình huỷ/từ chối, hoặc người gọi bên kia đã ngắt -> thoát màn gọi.
             route = .cancelCall

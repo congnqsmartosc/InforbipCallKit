@@ -118,15 +118,12 @@ public extension InfobipCallClient {
     }
 }
 
-/// Host hand-offs for actions the calling UI surfaces but the app owns (messaging, feedback).
+/// Host hand-offs for actions the calling UI surfaces but the app owns (messaging).
 public protocol InfobipCallHostDelegate: AnyObject {
     /// The user tapped "Message" during/after a call. Present your own chat for `peerName`.
     func callRequestsChat(peerName: String)
-    /// The post-call feedback sheet was submitted. `rating` is 0…2 (or nil if skipped).
-    func callDidFinish(withFeedbackRating rating: Int?, reasons: [String])
 }
 
 public extension InfobipCallHostDelegate {
     func callRequestsChat(peerName: String) {}
-    func callDidFinish(withFeedbackRating rating: Int?, reasons: [String]) {}
 }

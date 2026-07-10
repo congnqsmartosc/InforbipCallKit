@@ -148,5 +148,5 @@ final class KeypadViewController: UIViewController {
     }
 
     @objc private func tapHide() { router?.trigger(.closeKeypad) }
-    @objc private func tapEnd() { router?.trigger(.endCall) }
+    @objc private func tapEnd() { router?.trigger(.backToHome) }
 }

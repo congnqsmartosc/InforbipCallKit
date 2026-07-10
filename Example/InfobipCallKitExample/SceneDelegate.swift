@@ -41,8 +41,4 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDe
         // Present your own messaging UI for `peerName`.
         print("[Example] open chat with \(peerName)")
     }
-
-    func callDidFinish(withFeedbackRating rating: Int?, reasons: [String]) {
-        print("[Example] feedback rating=\(String(describing: rating)) reasons=\(reasons)")
-    }
 }

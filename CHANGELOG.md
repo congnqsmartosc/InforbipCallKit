@@ -4,12 +4,19 @@ All notable changes to **InfobipCallKit** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [1.1.1] - 2026-07-10
+## [1.1.2]
+
+### Removed
+- Post-call **feedback / rating screen** — a call now ends straight to teardown.
+- `InfobipCallHostDelegate.callDidFinish(withFeedbackRating:reasons:)` (the feedback callback) is
+  removed. `callRequestsChat(peerName:)` is unchanged.
+
+## [1.1.1] 
 
 ### Changed
 - In-call screen now shows **Speaker** and **Mute** only — the **Message** button was removed.
 
-## [1.1.0] - 2026-07-09
+## [1.1.0] 
 
 ### Added
 - **Call event stream.** A new `InfobipCallEvent` is delivered via the delegate
@@ -38,7 +45,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and this pro
 - With `pushConfigId == nil` the foreground `InfobipSimulator` dev path is unchanged (custom banner +
   in-app ringtone, no CallKit).
 
-## [1.0.0] - 2026-07-08
+## [1.0.0]
 
 ### Added
 - Initial release. A drop-in WebRTC calling experience wrapping the Infobip RTC iOS SDK:
@@ -50,6 +57,3 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and this pro
   `Rx` subspec (`rx_activeSession`). Public API mirrors the Android `InfobipCallClient`.
 - Foreground incoming calls via the SDK's `InfobipSimulator`.
 
-[1.1.1]: https://github.com/congnqsmartosc/InforbipCallKit/releases/tag/1.1.1
-[1.1.0]: https://github.com/congnqsmartosc/InforbipCallKit/releases/tag/1.1.0
-[1.0.0]: https://github.com/congnqsmartosc/InforbipCallKit/releases/tag/1.0.0

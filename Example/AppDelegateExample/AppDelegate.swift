@@ -41,8 +41,4 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, InfobipCallHostDele
     func callRequestsChat(peerName: String) {
         print("[AppDelegateExample] open chat with \(peerName)")
     }
-
-    func callDidFinish(withFeedbackRating rating: Int?, reasons: [String]) {
-        print("[AppDelegateExample] feedback rating=\(String(describing: rating)) reasons=\(reasons)")
-    }
 }

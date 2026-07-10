@@ -71,20 +71,6 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
             finishFlow()
             return .none()
 
-        case .endCall:
-            let vc = FeedbackViewController()
-            vc.router = unownedRouter
-            vc.onFeedback = { [weak self] rating, reasons in
-                self?.hostDelegate?.callDidFinish(withFeedbackRating: rating, reasons: reasons)
-            }
-            return .present(vc)
-
-        case .finishCall:
-            rootViewController.dismiss(animated: true) { [weak self] in
-                self?.finishFlow()
-            }
-            return .none()
-
         case .callUnreachable(let name, let destinationIdentity):
             let vc = CallUnreachableViewController(callerName: name, destinationIdentity: destinationIdentity)
             vc.router = unownedRouter
