@@ -45,12 +45,24 @@ protocol CallServiceType: AnyObject {
     /// Clear subscriber state (e.g. on logout) and tear down the incoming-call channel.
     func clearSubscriber()
 
-    /// Start the VoIP push registry at launch WITHOUT a token, so a killed-app push is caught.
-    /// No-op unless CallKit is enabled; safe to call multiple times.
-    func prepareForIncomingCalls()
-
-    /// Open the channel that receives incoming calls for the registered subscriber.
+    /// Open the InfobipSimulator channel (foreground dev path only). No-op on the CallKit/APNs
+    /// path, where the host owns the `PKPushRegistry` and drives push via ``enablePush(credentials:)``.
     func registerForIncomingCalls() throws
+
+    /// CallKit/APNs path: bind the host's VoIP `PKPushCredentials` to Infobip (host calls this from
+    /// its own `PKPushRegistryDelegate.pushRegistry(_:didUpdate:for:)`).
+    func enablePush(credentials: PKPushCredentials)
+
+    /// CallKit/APNs path: unbind push from Infobip (host calls this from
+    /// `pushRegistry(_:didInvalidatePushTokenFor:)`, or on logout).
+    func disablePush()
+
+    /// CallKit/APNs path: hand a VoIP `PKPushPayload` the host received off to Infobip. MUST be
+    /// called synchronously from the host's `didReceiveIncomingPushWith` before `completion()`, so
+    /// the incoming call is reported to CallKit before iOS can kill a push-launched app.
+    /// Returns true when the payload was an Infobip incoming call.
+    @discardableResult
+    func handleIncomingPush(_ payload: PKPushPayload) -> Bool
 
     /// Feed a push payload to the SDK. Returns true when handled as an Infobip incoming call.
     func handlePushNotification(_ payload: [String: String]) -> Bool
@@ -104,8 +116,8 @@ final class CallService: NSObject, CallServiceType {
         self.callKit = config.isCallKitEnabled ? CallKitManager(config: config) : nil
         super.init()
         wireCallKit()
-        // Create the real VoIP registry as early as possible so a killed-app push is delivered.
-        prepareForIncomingCalls()
+        // On the CallKit/APNs path the HOST owns the PKPushRegistry and hands pushes off via
+        // handleIncomingPush(_:) — the pod no longer creates a registry here.
     }
 
     // MARK: - Subscriber
@@ -136,25 +148,10 @@ final class CallService: NSObject, CallServiceType {
 
     // MARK: - Incoming registration
 
-    func prepareForIncomingCalls() {
-        // Real APNs VoIP path only: a plain PKPushRegistry needs no token to receive pushes, so we
-        // can (and must, for killed-app launches) create it eagerly. The InfobipSimulator path needs
-        // the token and is created in registerForIncomingCalls().
-        guard isCallKitEnabled else { return }
-        guard pushRegistry == nil else { return }
-        let registry = PKPushRegistry(queue: .main)
-        registry.desiredPushTypes = [.voIP]
-        registry.delegate = self
-        pushRegistry = registry
-        log("prepared VoIP push registry (CallKit)")
-    }
-
     func registerForIncomingCalls() throws {
-        if isCallKitEnabled {
-            // Registry already exists (created in init / prepareForIncomingCalls). Binding the
-            // device token to Infobip happens once both the VoIP credentials and subscriber token
-            // are available (see enablePushIfPossible / didUpdate pushCredentials).
-            prepareForIncomingCalls()
+        // CallKit/APNs path: the HOST owns the PKPushRegistry and drives push via
+        // enablePush(credentials:) + handleIncomingPush(_:). Nothing to start in the pod.
+        guard !isCallKitEnabled else {
             enablePushIfPossible()
             return
         }
@@ -171,6 +168,26 @@ final class CallService: NSObject, CallServiceType {
         registry.delegate = self
         pushRegistry = registry
         log("listening for incoming calls, registry: \(type(of: registry))")
+    }
+
+    // MARK: - Host-driven push (CallKit / APNs path)
+
+    func enablePush(credentials: PKPushCredentials) {
+        log("host provided VoIP push credentials")
+        pendingPushCredentials = credentials
+        enablePushIfPossible()
+    }
+
+    func disablePush() {
+        if let token = subscriber?.token, config.pushConfigId != nil {
+            infobipRTC.disablePushNotification(token)
+        }
+        pendingPushCredentials = nil
+        log("disabled VoIP push")
+    }
+
+    func handleIncomingPush(_ payload: PKPushPayload) -> Bool {
+        return handleIncomingPush(payload, type: .voIP)
     }
 
     func handlePushNotification(_ payload: [String: String]) -> Bool {
@@ -336,6 +353,10 @@ final class CallService: NSObject, CallServiceType {
 
 // MARK: - PKPushRegistryDelegate + IncomingCallEventListener
 
+// NOTE: On the CallKit/APNs path the HOST owns the PKPushRegistry and its delegate — the pod is
+// driven through enablePush(credentials:) / handleIncomingPush(_:) / disablePush() instead. These
+// PKPushRegistryDelegate methods are only invoked by the pod-owned `InfobipSimulator` (foreground
+// dev path), which mimics a registry over an active Infobip connection.
 extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
 
     func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
@@ -362,9 +383,10 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
         handleIncomingPush(payload, type: type)
     }
 
-    private func handleIncomingPush(_ payload: PKPushPayload, type: PKPushType) {
+    @discardableResult
+    private func handleIncomingPush(_ payload: PKPushPayload, type: PKPushType) -> Bool {
         log("didReceiveIncomingPush type=\(type.rawValue) payload=\(payload.dictionaryPayload)")
-        guard type == .voIP else { return }
+        guard type == .voIP else { return false }
 
         guard infobipRTC.isIncomingCall(payload) else {
             log("payload is NOT an incoming webrtc call — ignored")
@@ -375,7 +397,7 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
                     self?.callKit?.reportCallEnded(uuid: uuid, reason: .failed)
                 }
             }
-            return
+            return false
         }
 
         let callId = (payload.dictionaryPayload["callId"] as? String) ?? UUID().uuidString
@@ -391,6 +413,7 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
         }
 
         infobipRTC.handleIncomingCall(payload, self)
+        return true
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {

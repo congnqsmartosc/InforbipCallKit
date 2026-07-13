@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import PushKit
 
 /// Concrete ``InfobipCallClient`` — bridges the SDK facade (`CallService` / `ActiveCall`) to the
 /// public value-typed `CallSession` state, and fans that state out to the delegate, closure
@@ -99,9 +100,20 @@ final class InfobipCallClientImpl: InfobipCallClient {
         service.clearSubscriber()
     }
 
-    func prepareForIncomingCalls() {
-        CallLog.debug("prepareForIncomingCalls()", category: "Client")
-        service.prepareForIncomingCalls()
+    func enablePushNotifications(credentials: PKPushCredentials) {
+        CallLog.debug("enablePushNotifications(credentials:)", category: "Client")
+        service.enablePush(credentials: credentials)
+    }
+
+    func disablePushNotifications() {
+        CallLog.debug("disablePushNotifications()", category: "Client")
+        service.disablePush()
+    }
+
+    @discardableResult
+    func handleIncomingPush(payload: PKPushPayload) -> Bool {
+        CallLog.debug("handleIncomingPush(payload:)", category: "Client")
+        return service.handleIncomingPush(payload)
     }
 
     func registerForIncomingCalls() async throws {

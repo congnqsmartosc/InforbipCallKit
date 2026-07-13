@@ -1,4 +1,5 @@
 import Foundation
+import PushKit
 
 /// Errors surfaced by ``InfobipCallClient``.
 public enum InfobipCallError: LocalizedError {
@@ -81,13 +82,30 @@ public protocol InfobipCallClient: AnyObject {
     /// Clear subscriber state (e.g. on logout).
     func clearSubscriber()
 
-    /// Start the VoIP push registry at app launch **before** a token is available, so a call that
-    /// launched the app from a killed state is still delivered. Call this synchronously from
-    /// `application(_:didFinishLaunchingWithOptions:)` when using CallKit / real VoIP push
-    /// (`pushConfigId` set). No-op on the foreground `InfobipSimulator` dev path.
-    func prepareForIncomingCalls()
+    /// CallKit / real VoIP push path: the **host app** owns the `PKPushRegistry`. Call this from the
+    /// host's `PKPushRegistryDelegate.pushRegistry(_:didUpdate:for:)` (VoIP type) to bind the device
+    /// token to Infobip so its server can send VoIP pushes. Safe to call before or after
+    /// ``registerSubscriber(identity:displayName:token:imageURL:)`` — binding happens once both the
+    /// credentials and the subscriber token are available.
+    func enablePushNotifications(credentials: PKPushCredentials)
 
-    /// Open the channel that receives incoming calls.
+    /// Unbind VoIP push from Infobip. Call from `pushRegistry(_:didInvalidatePushTokenFor:)` or on
+    /// logout (``clearSubscriber()`` also unbinds).
+    func disablePushNotifications()
+
+    /// CallKit / real VoIP push path: hand a VoIP `PKPushPayload` the host received off to Infobip,
+    /// which reports the incoming call to CallKit and starts the WebRTC call.
+    ///
+    /// - Important: Call this **synchronously** from the host's
+    ///   `pushRegistry(_:didReceiveIncomingPushWith:for:completion:)` and only call `completion()`
+    ///   afterwards. iOS terminates a VoIP-push-launched app that does not report a call to CallKit
+    ///   before the completion handler returns.
+    /// - Returns: `true` when the payload was an Infobip incoming call.
+    @discardableResult
+    func handleIncomingPush(payload: PKPushPayload) -> Bool
+
+    /// Open the channel that receives incoming calls. Only needed on the foreground `InfobipSimulator`
+    /// dev path (`pushConfigId == nil`); a no-op on the CallKit/APNs path, where push is host-driven.
     func registerForIncomingCalls() async throws
 
     /// Returns `true` when `payload` was handled as an Infobip incoming call. On iOS, incoming

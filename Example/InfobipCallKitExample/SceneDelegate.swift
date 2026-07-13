@@ -1,10 +1,16 @@
 import UIKit
+import PushKit
 import InfobipCallKit
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDelegate {
 
     var window: UIWindow?
     private var callCenter: InfobipCallCenter!
+
+    /// The host app owns the VoIP push registry (CallKit / APNs path). It gets the device token,
+    /// hands it to Infobip via `enablePushNotifications(credentials:)`, and hands each incoming
+    /// VoIP push to Infobip via `handleIncomingPush(payload:)`.
+    private var voipRegistry: PKPushRegistry?
 
     func scene(
         _ scene: UIScene,
@@ -25,11 +31,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDe
         callCenter.install(on: window)
         callCenter.hostDelegate = self
 
-        // 2. Start listening for VoIP pushes at launch (before any token) so a call that launched
-        //    the app from a killed state is delivered. No-op unless CallKit/pushConfigId is set.
-        callCenter.client.prepareForIncomingCalls()
+        // 2. The HOST owns the VoIP push registry. Create it as early as possible so a call that
+        //    launched the app from a killed state is delivered.
+        let registry = PKPushRegistry(queue: .main)
+        registry.desiredPushTypes = [.voIP]
+        registry.delegate = self
+        voipRegistry = registry
 
-        // 2. Host UI.
+        // 3. Host UI.
         window.rootViewController = UINavigationController(rootViewController: HomeViewController(center: callCenter))
         window.makeKeyAndVisible()
         self.window = window
@@ -40,5 +49,34 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDe
     func callRequestsChat(peerName: String) {
         // Present your own messaging UI for `peerName`.
         print("[Example] open chat with \(peerName)")
+    }
+}
+
+// MARK: - PKPushRegistryDelegate (host-owned VoIP registry)
+
+extension SceneDelegate: PKPushRegistryDelegate {
+
+    func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
+        guard type == .voIP else { return }
+        // Send the device token to Infobip so its server can send VoIP pushes. Safe to call before
+        // or after registerSubscriber(...); Infobip binds once both are available.
+        callCenter.client.enablePushNotifications(credentials: pushCredentials)
+    }
+
+    func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
+        guard type == .voIP else { return }
+        callCenter.client.disablePushNotifications()
+    }
+
+    func pushRegistry(
+        _ registry: PKPushRegistry,
+        didReceiveIncomingPushWith payload: PKPushPayload,
+        for type: PKPushType,
+        completion: @escaping () -> Void
+    ) {
+        // IMPORTANT: hand the push to Infobip synchronously, THEN call completion(). Infobip reports
+        // the incoming call to CallKit before this returns, so iOS won't kill a push-launched app.
+        callCenter.client.handleIncomingPush(payload: payload)
+        completion()
     }
 }

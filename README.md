@@ -238,7 +238,7 @@ push, and the framework automatically drives **CallKit** (system incoming/outgoi
 and set `UIBackgroundModes` to include **`voip`** (plus `audio`). See `Example/*/*.entitlements` and
 `Example/project.yml`.
 
-**3. Configure & boot early:**
+**3. Configure early:**
 ```swift
 // In application(_:didFinishLaunchingWithOptions:) / scene(_:willConnectTo:)
 callCenter = InfobipCallCenter(config: InfobipCallConfig(
@@ -246,14 +246,48 @@ callCenter = InfobipCallCenter(config: InfobipCallConfig(
     callKitDisplayName: "My App",                  // shown on the system call UI
     ringtoneSound: "ring.caf"                       // optional
 ))
-callCenter.client.prepareForIncomingCalls()        // MUST be called synchronously at launch so a
-                                                    // killed-app VoIP push is caught
 ```
 
-**4. Keep the binding alive:** persist the logged-in identity and, on every launch, fetch a fresh
-token and call `registerSubscriber(...)` + `registerForIncomingCalls()`. A **killed-app incoming
-call needs no token** (the SDK handles the push payload directly); the token is only needed to
-enable push and to place outgoing calls.
+**4. The host app owns the VoIP `PKPushRegistry`.** Create it at launch (before any token) so a
+killed-app push is caught, and forward the two PushKit callbacks to Infobip:
+
+```swift
+import PushKit
+
+// Create the registry synchronously at launch and keep a strong reference to it.
+let voipRegistry = PKPushRegistry(queue: .main)
+voipRegistry.desiredPushTypes = [.voIP]
+voipRegistry.delegate = self
+
+extension AppDelegate: PKPushRegistryDelegate {
+    // Device token → Infobip (its server uses it to send VoIP pushes).
+    func pushRegistry(_ r: PKPushRegistry, didUpdate creds: PKPushCredentials, for type: PKPushType) {
+        guard type == .voIP else { return }
+        callCenter.client.enablePushNotifications(credentials: creds)
+    }
+
+    func pushRegistry(_ r: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
+        callCenter.client.disablePushNotifications()
+    }
+
+    // Incoming VoIP push → hand off to Infobip SYNCHRONOUSLY, then call completion().
+    func pushRegistry(_ r: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload,
+                      for type: PKPushType, completion: @escaping () -> Void) {
+        callCenter.client.handleIncomingPush(payload: payload)   // reports the call to CallKit
+        completion()                                             // only AFTER the hand-off
+    }
+}
+```
+
+> ⚠️ You **must** call `handleIncomingPush(payload:)` synchronously before `completion()`. Infobip
+> reports the incoming call to CallKit inside that call; iOS terminates a VoIP-push-launched app
+> that returns from the completion handler without having reported a call.
+
+**5. Keep the binding alive:** persist the logged-in identity and, on every launch, fetch a fresh
+token and call `registerSubscriber(...)`. A **killed-app incoming call needs no token** (the SDK
+handles the push payload directly); the token is only needed to enable push and to place outgoing
+calls. `registerForIncomingCalls()` is only needed on the foreground `InfobipSimulator` dev path
+(`pushConfigId == nil`).
 
 When CallKit is on, incoming calls ring through the **system UI** (even in the foreground — no custom
 banner), the user answers/declines there, and the framework presents its in-call screen once the app

@@ -4,6 +4,27 @@ All notable changes to **InfobipCallKit** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0]
+
+### Changed (breaking — CallKit / VoIP push path)
+- **The host app now owns the `PKPushRegistry`.** The pod no longer creates or manages a VoIP push
+  registry internally. The host creates the registry, receives the device token, and forwards the
+  PushKit callbacks to the pod. This gives the host full control of the push lifecycle. New API:
+  - `client.enablePushNotifications(credentials:)` — call from `pushRegistry(_:didUpdate:for:)` to
+    send the VoIP device token to Infobip.
+  - `client.handleIncomingPush(payload:)` — call **synchronously** from
+    `pushRegistry(_:didReceiveIncomingPushWith:for:completion:)` (before `completion()`) to hand an
+    incoming VoIP push to Infobip; it reports the call to CallKit and starts the WebRTC call.
+  - `client.disablePushNotifications()` — call from `pushRegistry(_:didInvalidatePushTokenFor:)`.
+- **Removed `client.prepareForIncomingCalls()`** — the host owns registry creation now, so it is no
+  longer needed. `registerForIncomingCalls()` remains but is only meaningful on the foreground
+  `InfobipSimulator` dev path (`pushConfigId == nil`); it is a no-op on the CallKit/APNs path.
+
+### Migration
+- Move the `PKPushRegistry` creation into your `AppDelegate`/`SceneDelegate`, conform it to
+  `PKPushRegistryDelegate`, and forward the three callbacks as shown in the README and in
+  `Example/*/*.swift`. Delete any `prepareForIncomingCalls()` call.
+
 ## [1.1.2]
 
 ### Removed
