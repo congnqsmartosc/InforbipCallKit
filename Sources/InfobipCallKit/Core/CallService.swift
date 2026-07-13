@@ -33,8 +33,16 @@ protocol CallServiceType: AnyObject {
     /// in-call screen for `call` (which is already accepting/established; do NOT call accept again).
     var onCallAnswered: ((ActiveCall) -> Void)? { get set }
 
-    /// `true` when CallKit + real VoIP push is active (`config.isCallKitEnabled`).
+    /// `true` when CallKit is enabled by config (`config.isCallKitEnabled`).
     var isCallKitEnabled: Bool { get }
+
+    /// Create and register the CallKit provider (`CXProvider`). Call when the app actually starts
+    /// using Infobip. No-op when CallKit isn't enabled by config, or when already active.
+    func activateCallService()
+
+    /// Tear down the CallKit provider so another SDK (e.g. a GSM call SDK) can own CallKit, or on
+    /// logout. Ends any in-flight calls. Safe to call when already inactive.
+    func deactivateCallService()
 
     /// Store the logged-in subscriber (identity + display name + host-provided token + avatar).
     func registerSubscriber(identity: String, displayName: String, token: String, imageURL: String?)
@@ -91,9 +99,14 @@ final class CallService: NSObject, CallServiceType {
 
     private let config: InfobipCallConfig
     private var pushRegistry: PKPushRegistry?
-    private let callKit: CallKitManager?
+    /// The CallKit provider wrapper. Created lazily by ``activateCallService()`` and released by
+    /// ``deactivateCallService()`` — `nil` means CallKit is not currently owned by the pod.
+    private var callKit: CallKitManager?
 
     var isCallKitEnabled: Bool { config.isCallKitEnabled }
+
+    /// `true` once ``activateCallService()`` has created the CallKit provider.
+    private var isCallKitActive: Bool { callKit != nil }
 
     /// Push payloads keyed by callId — to retry handleIncomingCall when the SDK can't fetch the
     /// call within 3s ("Call did not arrive in 3 seconds") on the first call after app launch.
@@ -113,11 +126,35 @@ final class CallService: NSObject, CallServiceType {
 
     init(config: InfobipCallConfig) {
         self.config = config
-        self.callKit = config.isCallKitEnabled ? CallKitManager(config: config) : nil
         super.init()
+        // CallKit (CXProvider) is NOT created here — the host calls activateCallService() when it
+        // actually starts using Infobip. This lets the center + host PushKit init early while
+        // leaving CallKit free for another SDK until Infobip is chosen.
+    }
+
+    // MARK: - CallKit lifecycle
+
+    func activateCallService() {
+        guard config.isCallKitEnabled else {
+            log("activateCallService ignored — CallKit disabled (pushConfigId nil / enableCallKit false)")
+            return
+        }
+        guard callKit == nil else { return }
+        callKit = CallKitManager(config: config)
         wireCallKit()
-        // On the CallKit/APNs path the HOST owns the PKPushRegistry and hands pushes off via
-        // handleIncomingPush(_:) — the pod no longer creates a registry here.
+        log("CallKit activated")
+    }
+
+    func deactivateCallService() {
+        guard callKit != nil else { return }
+        // End any in-flight calls and clear CallKit-tracked state before releasing the provider.
+        incomingByCallId.values.forEach { $0.activeCall?.hangup() }
+        incomingByCallId.removeAll()
+        outgoing?.call.hangup()
+        outgoing = nil
+        callKit?.invalidate()
+        callKit = nil
+        log("CallKit deactivated")
     }
 
     // MARK: - Subscriber
@@ -247,7 +284,7 @@ final class CallService: NSObject, CallServiceType {
         }
         activeCall.attach(call)
 
-        if isCallKitEnabled {
+        if isCallKitActive {
             let uuid = UUID(uuidString: activeCall.callId) ?? UUID()
             outgoing = (uuid, activeCall)
             callKit?.startOutgoingCall(uuid: uuid, handle: destinationIdentity)
@@ -391,7 +428,7 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
         guard infobipRTC.isIncomingCall(payload) else {
             log("payload is NOT an incoming webrtc call — ignored")
             // On the CallKit path iOS requires a report for every VoIP push; report then end it.
-            if isCallKitEnabled {
+            if isCallKitActive {
                 let uuid = UUID()
                 callKit?.reportIncomingCall(uuid: uuid, callerName: config.callKitDisplayName) { [weak self] _ in
                     self?.callKit?.reportCallEnded(uuid: uuid, reason: .failed)
@@ -403,7 +440,7 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
         let callId = (payload.dictionaryPayload["callId"] as? String) ?? UUID().uuidString
         pendingPayloads[callId] = payload
 
-        if isCallKitEnabled {
+        if isCallKitActive {
             // MUST report synchronously before completion() or iOS kills a push-launched app.
             let uuid = UUID(uuidString: callId) ?? UUID()
             let pending = PendingIncoming(uuid: uuid, callId: callId)
@@ -432,7 +469,7 @@ extension CallService: PKPushRegistryDelegate, IncomingCallEventListener {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            if self.isCallKitEnabled {
+            if self.isCallKitActive {
                 self.attachToPending(activeCall)
             }
             // Bind the session for host observers (banner presentation is suppressed on the CallKit

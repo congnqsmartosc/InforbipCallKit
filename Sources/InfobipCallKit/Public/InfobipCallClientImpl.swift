@@ -110,6 +110,16 @@ final class InfobipCallClientImpl: InfobipCallClient {
         service.disablePush()
     }
 
+    func activateCallService() {
+        CallLog.debug("activateCallService()", category: "Client")
+        service.activateCallService()
+    }
+
+    func deactivateCallService() {
+        CallLog.debug("deactivateCallService()", category: "Client")
+        service.deactivateCallService()
+    }
+
     @discardableResult
     func handleIncomingPush(payload: PKPushPayload) -> Bool {
         CallLog.debug("handleIncomingPush(payload:)", category: "Client")

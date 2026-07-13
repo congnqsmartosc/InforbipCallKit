@@ -4,6 +4,23 @@ All notable changes to **InfobipCallKit** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0]
+
+### Added
+- **`activateCallService()` / `deactivateCallService()`** on `InfobipCallCenter` (and
+  `InfobipCallClient`). CallKit (`CXProvider`) is now created **lazily** — you can init the center and
+  the host `PKPushRegistry` early, but CallKit isn't set up until `activateCallService()`.
+  `deactivateCallService()` ends any in-flight calls and releases the `CXProvider` so another calling
+  SDK (e.g. GSM) can own CallKit, or for logout.
+
+### Changed
+- CallKit calls are kept out of the system call history — `CXProviderConfiguration.includesCallsInRecents = false`.
+
+### Migration (from 1.2.0)
+- CallKit is no longer created automatically. Call **`callCenter.activateCallService()`** once at
+  launch (before forwarding VoIP pushes) when your app uses the Infobip calling path. See the README
+  "Background, locked & killed-app calls" section, step 4.
+
 ## [1.2.0]
 
 ### Changed (breaking — CallKit / VoIP push path)

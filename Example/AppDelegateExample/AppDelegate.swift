@@ -27,14 +27,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, InfobipCallHostDele
         ))
         callCenter.hostDelegate = self
 
-        // 2. The HOST owns the VoIP push registry. Create it at launch (before any token) so a call
+        // 2. Set up CallKit now that we've decided to use Infobip. Skip this (or call
+        //    deactivateCallService()) for a GSM-only path so CallKit stays free for another SDK.
+        callCenter.activateCallService()
+
+        // 3. The HOST owns the VoIP push registry. Create it at launch (before any token) so a call
         //    that launched the app from a killed state is delivered.
         let registry = PKPushRegistry(queue: .main)
         registry.desiredPushTypes = [.voIP]
         registry.delegate = self
         voipRegistry = registry
 
-        // 3. Classic AppDelegate window setup.
+        // 4. Classic AppDelegate window setup.
         let window = UIWindow(frame: UIScreen.main.bounds)
         window.rootViewController = UINavigationController(rootViewController: HomeViewController(center: callCenter))
         window.makeKeyAndVisible()

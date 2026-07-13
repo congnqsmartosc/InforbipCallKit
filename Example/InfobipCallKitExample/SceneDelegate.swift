@@ -31,14 +31,19 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDe
         callCenter.install(on: window)
         callCenter.hostDelegate = self
 
-        // 2. The HOST owns the VoIP push registry. Create it as early as possible so a call that
+        // 2. Set up CallKit now that we've decided to use Infobip. (A GSM-only build, or after a
+        //    remote-config/login check, would skip this — or call deactivateCallService() — to leave
+        //    CallKit free for another SDK.)
+        callCenter.activateCallService()
+
+        // 3. The HOST owns the VoIP push registry. Create it as early as possible so a call that
         //    launched the app from a killed state is delivered.
         let registry = PKPushRegistry(queue: .main)
         registry.desiredPushTypes = [.voIP]
         registry.delegate = self
         voipRegistry = registry
 
-        // 3. Host UI.
+        // 4. Host UI.
         window.rootViewController = UINavigationController(rootViewController: HomeViewController(center: callCenter))
         window.makeKeyAndVisible()
         self.window = window

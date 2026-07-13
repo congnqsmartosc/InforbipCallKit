@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'InfobipCallKit'
-  s.version          = '1.2.0'
+  s.version          = '1.3.0'
   s.summary          = 'Drop-in WebRTC calling UI wrapping the Infobip RTC iOS SDK.'
   s.description      = <<-DESC
     InfobipCallKit packages a complete UIKit calling experience — incoming/outgoing call screens,

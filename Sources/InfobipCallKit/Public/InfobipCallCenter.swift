@@ -68,6 +68,20 @@ public final class InfobipCallCenter {
         hostWindow = window
     }
 
+    /// Set up CallKit (create the `CXProvider`) — call when the app actually starts using Infobip.
+    /// You may create the center and the host `PKPushRegistry` earlier; CallKit is only created here.
+    /// No-op when CallKit isn't enabled by config, or when already active. Convenience for
+    /// `client.activateCallService()`.
+    public func activateCallService() {
+        client.activateCallService()
+    }
+
+    /// Tear CallKit down (release the `CXProvider`) so another calling SDK can own CallKit, or on
+    /// logout. Ends any in-flight calls. Convenience for `client.deactivateCallService()`.
+    public func deactivateCallService() {
+        client.deactivateCallService()
+    }
+
     // MARK: - Presentation
 
     // Always invoked on the main thread (from the client's main-dispatched callbacks and its

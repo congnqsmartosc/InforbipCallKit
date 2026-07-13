@@ -248,7 +248,19 @@ callCenter = InfobipCallCenter(config: InfobipCallConfig(
 ))
 ```
 
-**4. The host app owns the VoIP `PKPushRegistry`.** Create it at launch (before any token) so a
+**4. Activate CallKit when you decide to use Infobip.** The `CXProvider` is created lazily, so you
+can construct `InfobipCallCenter` (and the host `PKPushRegistry`) early but only set up CallKit once
+your app commits to the Infobip calling path — useful when a remote config / login check picks
+between Infobip and another (e.g. GSM) SDK:
+
+```swift
+callCenter.activateCallService()     // creates the CXProvider (call before forwarding pushes)
+
+// When switching away from Infobip (remote config off, or on logout):
+callCenter.deactivateCallService()   // ends in-flight calls and releases CallKit for other SDKs
+```
+
+**5. The host app owns the VoIP `PKPushRegistry`.** Create it at launch (before any token) so a
 killed-app push is caught, and forward the two PushKit callbacks to Infobip:
 
 ```swift
@@ -283,7 +295,7 @@ extension AppDelegate: PKPushRegistryDelegate {
 > reports the incoming call to CallKit inside that call; iOS terminates a VoIP-push-launched app
 > that returns from the completion handler without having reported a call.
 
-**5. Keep the binding alive:** persist the logged-in identity and, on every launch, fetch a fresh
+**6. Keep the binding alive:** persist the logged-in identity and, on every launch, fetch a fresh
 token and call `registerSubscriber(...)`. A **killed-app incoming call needs no token** (the SDK
 handles the push payload directly); the token is only needed to enable push and to place outgoing
 calls. `registerForIncomingCalls()` is only needed on the foreground `InfobipSimulator` dev path
@@ -291,8 +303,9 @@ calls. `registerForIncomingCalls()` is only needed on the foreground `InfobipSim
 
 When CallKit is on, incoming calls ring through the **system UI** (even in the foreground — no custom
 banner), the user answers/declines there, and the framework presents its in-call screen once the app
-is active. Outgoing calls show the system green pill / lock-screen controls / Recents. The
-`activeSession` state and `InfobipCallEvent` stream behave the same in both modes.
+is active. Outgoing calls show the system green pill / lock-screen controls. (Infobip calls are kept
+out of the system call history / Recents.) The `activeSession` state and `InfobipCallEvent` stream
+behave the same in both modes.
 
 > The framework deliberately does **not** forward CallKit's `didActivate` audio session — the Infobip
 > RTC SDK owns and configures `AVAudioSession` itself.

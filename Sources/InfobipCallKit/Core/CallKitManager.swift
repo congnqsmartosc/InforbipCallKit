@@ -40,6 +40,8 @@ final class CallKitManager: NSObject {
         configuration.maximumCallGroups = 1
         configuration.maximumCallsPerCallGroup = 1
         configuration.supportedHandleTypes = [.generic]
+        // Keep Infobip calls out of the system call history (Recents / Phone app).
+        configuration.includesCallsInRecents = false
         if let ringtone = config.ringtoneSound {
             configuration.ringtoneSound = ringtone
         }
@@ -49,6 +51,14 @@ final class CallKitManager: NSObject {
         self.provider = CXProvider(configuration: configuration)
         super.init()
         provider.setDelegate(self, queue: .main)
+    }
+
+    /// Tear down the CallKit provider: ends every call associated with it and drops the delegate.
+    /// After this the app holds no `CXProvider`, so another SDK can own CallKit normally.
+    func invalidate() {
+        CallLog.debug("invalidate provider", category: "CallKit")
+        provider.setDelegate(nil, queue: nil)
+        provider.invalidate()
     }
 
     // MARK: - Incoming

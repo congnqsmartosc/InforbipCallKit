@@ -93,6 +93,16 @@ public protocol InfobipCallClient: AnyObject {
     /// logout (``clearSubscriber()`` also unbinds).
     func disablePushNotifications()
 
+    /// Create and register the CallKit provider (`CXProvider`) — call when the app actually starts
+    /// using Infobip (e.g. after a remote-config / login check selects the Infobip calling path).
+    /// You can create ``InfobipCallCenter`` and the host `PKPushRegistry` earlier; CallKit itself is
+    /// only set up here. No-op when CallKit isn't enabled by config, or when already active.
+    func activateCallService()
+
+    /// Tear down the CallKit provider so another calling SDK can own CallKit, or on logout. Ends any
+    /// in-flight calls and releases the `CXProvider`. Safe to call when already inactive.
+    func deactivateCallService()
+
     /// CallKit / real VoIP push path: hand a VoIP `PKPushPayload` the host received off to Infobip,
     /// which reports the incoming call to CallKit and starts the WebRTC call.
     ///
