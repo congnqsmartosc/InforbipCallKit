@@ -4,6 +4,24 @@ All notable changes to **InfobipCallKit** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.1]
+
+### Added
+- **Callee display info on outgoing calls.** `startOutgoingCall` now takes optional `displayName` /
+  `imageURL` for the **callee**, so the caller's own in-call screen and the CallKit UI show the
+  callee's friendly name/avatar instead of the raw identity:
+  `startOutgoingCall(destinationIdentity:displayName:imageURL:customData:)` (older overloads kept).
+- **More observable events** on the `InfobipCallEvent` stream:
+  - Network reconnection — `.reconnecting`, `.reconnected`, `.remoteDisconnected`, `.remoteReconnected`.
+  - `CallEndReason.category` — a semantic classification of the SDK end code
+    (`.normal` / `.noAnswer` / `.busy` / `.declined` / `.cancelled` / `.unavailable` /
+    `.deviceError` / `.mediaError` / `.unauthorized` / `.error`), so hosts can detect "callee
+    unavailable/offline" etc. without hard-coding Infobip numbers.
+
+### Changed
+- Counterpart name resolution now prefers the app-provided display name (customData) over the SDK
+  endpoint's raw identifier.
+
 ## [1.3.0]
 
 ### Added

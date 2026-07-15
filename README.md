@@ -150,7 +150,15 @@ stays host-provided too.
 // plain call already shows the right caller on their incoming screen:
 try await callCenter.client.startOutgoingCall(destinationIdentity: "customer")
 
-// …or pass customData explicitly to override / add fields (host values win over auto-forwarded):
+// Pass the CALLEE's display info so the caller's own call screen + CallKit show the callee's
+// name/avatar (the pod can't derive it from the identity):
+try await callCenter.client.startOutgoingCall(
+    destinationIdentity: "customer",
+    displayName: "Trần Thị Hoa",
+    imageURL: "https://…/callee.jpg"
+)
+
+// …or pass customData explicitly to override / add forwarded fields (host values win):
 try await callCenter.client.startOutgoingCall(
     destinationIdentity: "customer",
     customData: ["displayName": "Nguyễn Văn Nam", "avatarUrl": "https://…/a.jpg"]
@@ -194,8 +202,9 @@ callCenter.client.rx_activeSession
 ## Observe call events
 
 Alongside the `activeSession` state, the SDK emits discrete **`InfobipCallEvent`**s for every
-signal it receives — call start/end (with a structured end reason), connection/signal quality, and
-mute / speaker / audio-route changes. Delivered the same three ways as state:
+signal it receives — call start/end (with a structured, categorized end reason), connection/signal
+quality, network reconnection, and mute / speaker / audio-route changes. Delivered the same three
+ways as state:
 
 ```swift
 // delegate (optional method — default no-op)
@@ -203,8 +212,11 @@ func callClient(_ client: InfobipCallClient, didReceive event: InfobipCallEvent)
     switch event {
     case .started(let session):            // outgoing placed / incoming received
     case .ringing, .connecting, .established:
-    case .ended(let reason):               // reason.name e.g. "NORMAL_HANGUP" / "NO_ANSWER", .code, .message, .isError
+    case .ended(let reason):               // reason.category (e.g. .unavailable = callee offline),
+                                            // plus reason.name / .code / .message / .isError
     case .networkQualityChanged(let q):    // .bad … .excellent
+    case .reconnecting, .reconnected:      // this device lost / recovered its network mid-call
+    case .remoteDisconnected, .remoteReconnected:  // the other party lost / recovered network
     case .muteChanged(let m):
     case .speakerChanged(let on):
     case .audioRouteChanged(let name):
