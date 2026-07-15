@@ -39,7 +39,7 @@ final class InfobipCallClientImpl: InfobipCallClient {
     private var currentObserverId: UUID?
 
     /// Last outgoing target, for "Try again" on the unreachable screen.
-    private var lastOutgoing: (identity: String, customData: [String: String])?
+    private var lastOutgoing: (identity: String, displayName: String?, imageURL: String?, customData: [String: String])?
 
     init(service: CallServiceType, config: InfobipCallConfig) {
         self.service = service
@@ -143,11 +143,11 @@ final class InfobipCallClientImpl: InfobipCallClient {
 
     // MARK: Outgoing
 
-    func startOutgoingCall(destinationIdentity: String, customData: [String: String]) async throws -> CallSession {
+    func startOutgoingCall(destinationIdentity: String, displayName: String?, imageURL: String?, customData: [String: String]) async throws -> CallSession {
         CallLog.debug("startOutgoingCall(destinationIdentity: \(destinationIdentity))", category: "Client")
         try await requireMicrophonePermission()
-        let call = try await service.makeCall(destinationIdentity: destinationIdentity, customData: customData)
-        lastOutgoing = (destinationIdentity, customData)
+        let call = try await service.makeCall(destinationIdentity: destinationIdentity, displayName: displayName, imageURL: imageURL, customData: customData)
+        lastOutgoing = (destinationIdentity, displayName, imageURL, customData)
         await MainActor.run {
             self.bind(call: call, initialStatus: .connecting)
             self.onPresentCall?(call, .outgoing)
@@ -158,7 +158,7 @@ final class InfobipCallClientImpl: InfobipCallClient {
     /// Redial the last outgoing call (used by the unreachable screen's "Try again").
     func retryLastCall() async throws -> CallSession {
         guard let last = lastOutgoing else { throw InfobipCallError.nothingToRetry }
-        return try await startOutgoingCall(destinationIdentity: last.identity, customData: last.customData)
+        return try await startOutgoingCall(destinationIdentity: last.identity, displayName: last.displayName, imageURL: last.imageURL, customData: last.customData)
     }
 
     // MARK: Incoming
@@ -237,6 +237,14 @@ final class InfobipCallClientImpl: InfobipCallClient {
                 self.currentNetworkQuality = quality
                 self.updateSession(from: call, status: nil)
                 self.emitEvent(.networkQualityChanged(quality))
+            case .reconnecting:
+                self.emitEvent(.reconnecting)
+            case .reconnected:
+                self.emitEvent(.reconnected)
+            case .remoteDisconnected:
+                self.emitEvent(.remoteDisconnected)
+            case .remoteReconnected:
+                self.emitEvent(.remoteReconnected)
             case .muteChanged(let muted):
                 self.updateSession(from: call, status: nil)
                 self.emitEvent(.muteChanged(muted))

@@ -75,9 +75,10 @@ protocol CallServiceType: AnyObject {
     /// Feed a push payload to the SDK. Returns true when handled as an Infobip incoming call.
     func handlePushNotification(_ payload: [String: String]) -> Bool
 
-    /// Place a WebRTC call to `destinationIdentity`. `customData` is forwarded to the callee.
+    /// Place a WebRTC call to `destinationIdentity`. `displayName`/`imageURL` describe the **callee**
+    /// (shown on this caller's own outgoing screen + CallKit); `customData` is forwarded to the callee.
     /// Returns an `ActiveCall` with its listener already attached.
-    func makeCall(destinationIdentity: String, customData: [String: String]) async throws -> ActiveCall
+    func makeCall(destinationIdentity: String, displayName: String?, imageURL: String?, customData: [String: String]) async throws -> ActiveCall
 }
 
 /// Tracks an incoming call reported to CallKit whose `ActiveCall` may not have arrived yet.
@@ -180,6 +181,8 @@ final class CallService: NSObject, CallServiceType {
         pushRegistry = nil
         pendingPushCredentials = nil
         subscriber = nil
+        // The InfobipRTC facade has no `disconnect()`; ending any active call is the valid teardown.
+        infobipRTC.getActiveCall()?.hangup()
         log("cleared subscriber")
     }
 
@@ -256,10 +259,15 @@ final class CallService: NSObject, CallServiceType {
 
     // MARK: - Outgoing
 
-    func makeCall(destinationIdentity: String, customData: [String: String]) async throws -> ActiveCall {
+    func makeCall(destinationIdentity: String, displayName: String?, imageURL: String?, customData: [String: String]) async throws -> ActiveCall {
         guard let subscriber = subscriber else { throw CallServiceError.notRegistered }
 
-        let activeCall = ActiveCall(outgoingCustomData: [:], customDataKeys: config.customDataKeys)
+        // The CALLEE's display info (provided by the host) — shown on THIS caller's own outgoing
+        // screen + CallKit. Stored locally on the ActiveCall; not sent over the wire.
+        var localInfo: [String: String] = [:]
+        if let displayName = displayName { localInfo[config.customDataKeys.displayName] = displayName }
+        if let imageURL = imageURL { localInfo[config.customDataKeys.avatarURL] = imageURL }
+        let activeCall = ActiveCall(outgoingCustomData: localInfo, customDataKeys: config.customDataKeys)
 
         // Auto-forward the registered subscriber's own display info to the callee, so the host
         // doesn't have to build customData by hand. Any keys the host passed explicitly win.
@@ -270,7 +278,7 @@ final class CallService: NSObject, CallServiceType {
         }
         forwarded.merge(customData) { _, hostValue in hostValue }
 
-        log("makeCall → \(destinationIdentity) customData keys=\(forwarded.keys.sorted())")
+        log("makeCall → \(destinationIdentity) callee=\(displayName ?? destinationIdentity) customData keys=\(forwarded.keys.sorted())")
 
         let request = CallWebrtcRequest(
             subscriber.token,
@@ -287,7 +295,8 @@ final class CallService: NSObject, CallServiceType {
         if isCallKitActive {
             let uuid = UUID(uuidString: activeCall.callId) ?? UUID()
             outgoing = (uuid, activeCall)
-            callKit?.startOutgoingCall(uuid: uuid, handle: destinationIdentity)
+            // Show the callee's friendly name on the system call UI when the host provided one.
+            callKit?.startOutgoingCall(uuid: uuid, handle: displayName ?? destinationIdentity)
             observeOutgoingForCallKit(activeCall, uuid: uuid)
         }
         return activeCall

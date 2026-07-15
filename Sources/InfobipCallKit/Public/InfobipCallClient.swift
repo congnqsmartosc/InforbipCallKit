@@ -123,9 +123,16 @@ public protocol InfobipCallClient: AnyObject {
     @discardableResult
     func handlePushNotification(_ payload: [String: String]) -> Bool
 
-    /// Start an outgoing WebRTC call. `customData` is forwarded to the callee (e.g. to pass the
-    /// caller's displayName / avatarUrl for the incoming-call screen).
-    func startOutgoingCall(destinationIdentity: String, customData: [String: String]) async throws -> CallSession
+    /// Start an outgoing WebRTC call.
+    /// - Parameters:
+    ///   - destinationIdentity: the callee's WebRTC identity to dial.
+    ///   - displayName: the callee's friendly name to show on **this** caller's own call screen and
+    ///     the system CallKit UI. Pass it when your app knows the callee's name (the pod can't derive
+    ///     it from the identity); when `nil` the screen falls back to the identity.
+    ///   - imageURL: the callee's avatar URL for the caller's call screen (optional).
+    ///   - customData: forwarded to the **callee** (the caller's own displayName / avatarUrl are
+    ///     auto-forwarded, so this is only needed for extra fields).
+    func startOutgoingCall(destinationIdentity: String, displayName: String?, imageURL: String?, customData: [String: String]) async throws -> CallSession
 
     func acceptIncomingCall() async throws
     func declineIncomingCall() async throws
@@ -137,7 +144,17 @@ public protocol InfobipCallClient: AnyObject {
 public extension InfobipCallClient {
     /// Convenience overload matching the Android default argument.
     func startOutgoingCall(destinationIdentity: String) async throws -> CallSession {
-        try await startOutgoingCall(destinationIdentity: destinationIdentity, customData: [:])
+        try await startOutgoingCall(destinationIdentity: destinationIdentity, displayName: nil, imageURL: nil, customData: [:])
+    }
+
+    /// Convenience overload without callee display info (back-compatible with the original API).
+    func startOutgoingCall(destinationIdentity: String, customData: [String: String]) async throws -> CallSession {
+        try await startOutgoingCall(destinationIdentity: destinationIdentity, displayName: nil, imageURL: nil, customData: customData)
+    }
+
+    /// Convenience overload without extra forwarded `customData`.
+    func startOutgoingCall(destinationIdentity: String, displayName: String?, imageURL: String?) async throws -> CallSession {
+        try await startOutgoingCall(destinationIdentity: destinationIdentity, displayName: displayName, imageURL: imageURL, customData: [:])
     }
 
     /// Convenience overload without a subscriber avatar (back-compatible with the original API).

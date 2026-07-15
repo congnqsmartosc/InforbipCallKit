@@ -135,6 +135,13 @@ final class FreeCallViewModel {
         case .networkQualityChanged:
             break   // hiển thị chất lượng mạng do host lo; UI trong pod không dùng.
 
+        case .reconnecting, .remoteDisconnected:
+            // Mạng rớt giữa cuộc gọi — báo cho user, đồng hồ vẫn giữ nguyên tới khi phục hồi/kết thúc.
+            onStatusText?("Đang kết nối lại…")
+
+        case .reconnected, .remoteReconnected:
+            if phase == .established { onStatusText?(formattedDuration()) }
+
         case .muteChanged(let muted):
             onMuteChange?(muted)
 

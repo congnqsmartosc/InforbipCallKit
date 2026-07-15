@@ -12,6 +12,14 @@ enum CallEvent {
     case error(CallEndReason)
     /// Chất lượng mạng đổi (SDK NetworkQualityEventListener).
     case networkQualityChanged(InfobipNetworkQuality)
+    /// Mạng của thiết bị này rớt, SDK đang thử kết nối lại (onReconnecting).
+    case reconnecting
+    /// Kết nối của thiết bị này đã phục hồi (onReconnected).
+    case reconnected
+    /// Đối phương rớt mạng (onRemoteDisconnected).
+    case remoteDisconnected
+    /// Đối phương đã kết nối lại (onRemoteReconnected).
+    case remoteReconnected
     /// Trạng thái điều khiển local (mute/loa) đổi — để mọi màn đang mở cập nhật icon.
     case muteChanged(Bool)
     case speakerChanged(Bool)
@@ -69,15 +77,15 @@ final class ActiveCall: NSObject {
 
     // MARK: - Caller info
 
-    /// Tên hiển thị đối phương: displayName từ token (endpoint) -> customData -> identity.
+    /// Tên hiển thị đối phương: ưu tiên customData do app cấp (đã forward / host cung cấp) ->
+    /// displayIdentifier của endpoint (Infobip có thể trả về chính identity) -> identity.
     var counterpartName: String {
-        guard let call = call else {
-            return customData[customDataKeys.displayName] ?? ""
+        if let name = customData[customDataKeys.displayName], !name.isEmpty {
+            return name
         }
+        guard let call = call else { return "" }
         let endpoint = direction == .incoming ? call.source() : call.destination()
-        return endpoint.displayIdentifier()
-            ?? customData[customDataKeys.displayName]
-            ?? endpoint.identifier()
+        return endpoint.displayIdentifier() ?? endpoint.identifier()
     }
 
     var avatarURL: URL? {
@@ -294,10 +302,10 @@ extension ActiveCall: WebrtcCallEventListener {
     func onRemoteScreenShareRemoved() {}
     func onRemoteMuted() {}
     func onRemoteUnmuted() {}
-    func onRemoteDisconnected(_ remoteDisconnectedEvent: RemoteDisconnectedEvent) {}
-    func onRemoteReconnected(_ remoteReconnectedEvent: RemoteReconnectedEvent) {}
-    func onReconnecting(_ callReconnectingEvent: CallReconnectingEvent) {}
-    func onReconnected(_ callReconnectedEvent: CallReconnectedEvent) {}
+    func onRemoteDisconnected(_ remoteDisconnectedEvent: RemoteDisconnectedEvent) { emit(.remoteDisconnected) }
+    func onRemoteReconnected(_ remoteReconnectedEvent: RemoteReconnectedEvent) { emit(.remoteReconnected) }
+    func onReconnecting(_ callReconnectingEvent: CallReconnectingEvent) { emit(.reconnecting) }
+    func onReconnected(_ callReconnectedEvent: CallReconnectedEvent) { emit(.reconnected) }
     func onCallRecordingStarted(_ callRecordingStartedEvent: CallRecordingStartedEvent) {}
     func onTalkingWhileMuted(_ talkingWhileMuted: TalkingWhileMutedEvent) {}
 }

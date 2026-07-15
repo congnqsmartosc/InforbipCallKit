@@ -63,9 +63,14 @@ final class HomeViewController: UIViewController {
             case .connecting:         print("[Example] connecting")
             case .established:        print("[Example] established")
             case .ended(let reason):
-                print("[Example] call ended: \(reason.name) (code \(reason.code), isError: \(reason.isError)) — \(reason.message)")
+                // reason.category classifies the raw SDK code (e.g. .unavailable = callee offline).
+                print("[Example] call ended: \(reason.category) — \(reason.name) (code \(reason.code)) \(reason.message)")
             case .networkQualityChanged(let quality):
                 print("[Example] network quality: \(quality)")
+            case .reconnecting:        print("[Example] reconnecting… (this device lost network)")
+            case .reconnected:         print("[Example] reconnected")
+            case .remoteDisconnected:  print("[Example] remote party lost network")
+            case .remoteReconnected:   print("[Example] remote party reconnected")
             case .muteChanged(let muted):     print("[Example] muted: \(muted)")
             case .speakerChanged(let on):     print("[Example] speaker: \(on)")
             case .audioRouteChanged(let name): print("[Example] audio route: \(name)")
@@ -145,10 +150,15 @@ final class HomeViewController: UIViewController {
     @objc private func didTapCall() {
         guard let me = myIdentity else { return }
         let destination = identities.first { $0 != me } ?? me
-        // No customData needed: the SDK auto-forwards the registered subscriber's name + avatar.
+        // Pass the callee's display info so the outgoing screen shows their name/avatar (the pod
+        // can't derive it from the identity). The caller's own info is auto-forwarded to the callee.
         Task {
             do {
-                _ = try await center.client.startOutgoingCall(destinationIdentity: destination)
+                _ = try await center.client.startOutgoingCall(
+                    destinationIdentity: destination,
+                    displayName: displayNames[destination] ?? destination,
+                    imageURL: avatars[destination]
+                )
             } catch {
                 presentAlert(error.localizedDescription)
             }

@@ -20,6 +20,15 @@ public enum InfobipCallEvent: Equatable {
     case ended(CallEndReason)
     /// The connection quality changed (SDK network-quality signal).
     case networkQualityChanged(InfobipNetworkQuality)
+    /// This device lost its network and the SDK is trying to re-establish the call. The call is not
+    /// over — show a "Reconnecting…" state and wait for ``reconnected`` or ``ended``.
+    case reconnecting
+    /// This device's connection recovered after ``reconnecting``.
+    case reconnected
+    /// The remote party lost their network connection.
+    case remoteDisconnected
+    /// The remote party's connection recovered.
+    case remoteReconnected
     /// The local microphone mute state changed.
     case muteChanged(Bool)
     /// The speakerphone state changed.
@@ -30,7 +39,7 @@ public enum InfobipCallEvent: Equatable {
 
 /// Why a call ended, mapped from the Infobip SDK's `ErrorCode`.
 public struct CallEndReason: Equatable {
-    /// Numeric SDK code (`ErrorCode.id`).
+    /// Numeric SDK code (`ErrorCode.id`), e.g. `10000` NORMAL_HANGUP, `10307` REQUEST_TIMEOUT.
     public let code: Int
     /// Machine-readable name, e.g. `"NORMAL_HANGUP"`, `"NO_ANSWER"`, `"BUSY"` (`ErrorCode.name`).
     public let name: String
@@ -44,6 +53,46 @@ public struct CallEndReason: Equatable {
         self.name = name
         self.message = message
         self.isError = isError
+    }
+
+    /// Semantic classification of the raw SDK code/name, so hosts don't hard-code Infobip numbers.
+    /// Derived from the SDK error name, with the code's group (`101xx` handset, `102xx` user,
+    /// `103xx` operator) as a fallback for undocumented codes.
+    public enum Category: Equatable {
+        case normal          // NORMAL_HANGUP, ANSWERED_ELSEWHERE, HUMAN/MACHINE_DETECTED, MAX_DURATION_REACHED
+        case noAnswer        // NO_ANSWER
+        case busy            // BUSY
+        case declined        // REJECTED — callee declined
+        case cancelled       // CANCELLED — caller cancelled before routing
+        case unavailable     // callee offline / TEMPORARILY_UNAVAILABLE / REQUEST_TIMEOUT (unreachable)
+        case deviceError     // DEVICE_FORBIDDEN / DEVICE_NOT_FOUND / DEVICE_UNAVAILABLE (mic/camera)
+        case mediaError      // MEDIA_ERROR — audio/media problem during the call
+        case unauthorized    // UNAUTHENTICATED / FORBIDDEN — caller not authorized
+        case error           // any other operator/error condition
+    }
+
+    /// See ``Category``.
+    public var category: Category {
+        switch name.uppercased() {
+        case "NORMAL_HANGUP", "ANSWERED_ELSEWHERE", "HUMAN_DETECTED", "MACHINE_DETECTED", "MAX_DURATION_REACHED":
+            return .normal
+        case "NO_ANSWER":                                     return .noAnswer
+        case "BUSY":                                          return .busy
+        case "REJECTED":                                      return .declined
+        case "CANCELLED":                                     return .cancelled
+        case "TEMPORARILY_UNAVAILABLE", "REQUEST_TIMEOUT":    return .unavailable
+        case "DEVICE_FORBIDDEN", "DEVICE_NOT_FOUND", "DEVICE_UNAVAILABLE":
+            return .deviceError
+        case "MEDIA_ERROR":                                   return .mediaError
+        case "FORBIDDEN", "UNAUTHENTICATED":                  return .unauthorized
+        default:
+            switch code / 100 {   // group by hundreds digit for undocumented codes
+            case 101: return .deviceError
+            case 102: return .unavailable
+            case 103: return .error
+            default:  return isError ? .error : .normal
+            }
+        }
     }
 }
 
