@@ -1,13 +1,14 @@
 Pod::Spec.new do |s|
   s.name             = 'InfobipCallKit'
-  s.version          = '1.3.1'
+  s.version          = '1.4.0'
   s.summary          = 'Drop-in WebRTC calling UI wrapping the Infobip RTC iOS SDK.'
   s.description      = <<-DESC
     InfobipCallKit packages a complete UIKit calling experience — incoming/outgoing call screens,
-    ringtone/ringback, in-call controls (mute, speaker, audio route), post-call feedback — on top
-    of the Infobip RTC SDK. The host app supplies a WebRTC token via registerSubscriber and the
-    framework presents and drives all call UI on its own overlay window. The public API mirrors the
-    Android InfobipCallClient interface.
+    ringtone/ringback, in-call controls (mute, speaker, audio route), and CallKit + VoIP-push
+    background calls — on top of the Infobip RTC SDK. The built-in UI is fully configurable
+    (appearance, strings, or replace any screen). The host app supplies a WebRTC token via
+    registerSubscriber and the framework presents and drives all call UI on its own overlay window.
+    The public API mirrors the Android InfobipCallClient interface.
   DESC
   s.homepage         = 'https://github.com/congnqsmartosc/InforbipCallKit'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
