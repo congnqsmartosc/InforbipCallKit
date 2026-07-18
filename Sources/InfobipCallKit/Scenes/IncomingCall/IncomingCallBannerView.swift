@@ -62,7 +62,7 @@ final class IncomingCallBannerView: UIView {
         iconView.contentMode = .scaleAspectFill
         iconView.clipsToBounds = true
 
-        appLabel.text = "Xanh SM"
+        appLabel.text = CallStrings.current.incomingBrandLabel
         appLabel.font = .systemFont(ofSize: 12, weight: .medium)
         appLabel.textColor = .appTextSecondary
         nameLabel.font = .systemFont(ofSize: 16, weight: .semibold)
@@ -70,8 +70,8 @@ final class IncomingCallBannerView: UIView {
 
         declineButton.diameter = 40
         acceptButton.diameter = 40
-        declineButton.configure(icon: UIImage(systemName: "xmark"), background: .appDecline, pointSize: 16)
-        acceptButton.configure(icon: UIImage(systemName: "phone.fill"), background: .appAccept, pointSize: 16)
+        declineButton.configure(icon: CallAppearance.current.icons.decline, background: .appDecline, pointSize: 16)
+        acceptButton.configure(icon: CallAppearance.current.icons.accept, background: .appAccept, pointSize: 16)
         declineButton.addTarget(self, action: #selector(tapDecline), for: .touchUpInside)
         acceptButton.addTarget(self, action: #selector(tapAccept), for: .touchUpInside)
     }

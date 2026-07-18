@@ -12,6 +12,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, InfobipCallHostDele
     var window: UIWindow?
     private var callCenter: InfobipCallCenter!
 
+    /// The Infobip WebRTC push-configuration id, passed to Infobip **at runtime** via
+    /// `enablePushNotifications(credentials:pushConfigId:)` rather than hardcoded in `InfobipCallConfig`.
+    private let pushConfigId = "1ce41cec-c13a-41b2-80dc-de54cf62d6bf"
+
     /// The host app owns the VoIP push registry (CallKit / APNs path).
     private var voipRegistry: PKPushRegistry?
 
@@ -20,10 +24,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, InfobipCallHostDele
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         // 1. Create the call center and (optionally) hint it at the host window.
-        //    Set `pushConfigId` (Infobip portal) to enable CallKit + background/locked/killed calls.
+        //    `enableCallKit: true` turns CallKit on without hardcoding pushConfigId here — it's
+        //    supplied at runtime in the push-registry delegate below.
         callCenter = InfobipCallCenter(config: InfobipCallConfig(
-            // pushConfigId: "your-infobip-push-config-id",
-            callKitDisplayName: "CallKit Example"
+            callKitDisplayName: "CallKit Example",
+            enableCallKit: true
         ))
         callCenter.hostDelegate = self
 
@@ -61,7 +66,8 @@ extension AppDelegate: PKPushRegistryDelegate {
 
     func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
         guard type == .voIP else { return }
-        callCenter.client.enablePushNotifications(credentials: pushCredentials)
+        // Pass the push-config id at runtime (instead of in InfobipCallConfig).
+        callCenter.client.enablePushNotifications(credentials: pushCredentials, pushConfigId: pushConfigId)
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {

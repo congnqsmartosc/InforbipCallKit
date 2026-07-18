@@ -70,22 +70,22 @@ final class FreeCallViewModel {
         case .incoming:
             if alreadyAnswered {
                 // Answered on CallKit — the SDK is already accepting; just show connecting.
-                setPhase(.connecting, status: "Đang kết nối…")
+                setPhase(.connecting, status: CallStrings.current.statusConnecting)
             } else if autoAccept {
-                setPhase(.connecting, status: "Đang kết nối…")
+                setPhase(.connecting, status: CallStrings.current.statusConnecting)
                 call.accept()
             } else {
-                setPhase(.incoming, status: "Calling you")
+                setPhase(.incoming, status: CallStrings.current.statusIncoming)
             }
         case .outgoing:
-            setPhase(.connecting, status: "Đang kết nối…")
+            setPhase(.connecting, status: CallStrings.current.statusConnecting)
         }
     }
 
     // MARK: - Intents
 
     func accept() {
-        setPhase(.connecting, status: "Đang kết nối…")
+        setPhase(.connecting, status: CallStrings.current.statusConnecting)
         call.accept()
     }
 
@@ -115,6 +115,10 @@ final class FreeCallViewModel {
         router.trigger(.audioRoutes(call))
     }
 
+    var audioRoutes: [AudioRouteOption] { call.audioRoutes }
+
+    func selectAudioRoute(id: String) { call.selectAudioRoute(id: id) }
+
     func openChat() {
         router.trigger(.openChat(peerName: callerName))
     }
@@ -126,7 +130,7 @@ final class FreeCallViewModel {
         switch event {
         case .ringing, .earlyMedia:
             if call.direction == .outgoing {
-                setPhase(.ringing, status: "Đang đổ chuông…")
+                setPhase(.ringing, status: CallStrings.current.statusRinging)
             }
 
         case .established:
@@ -137,7 +141,7 @@ final class FreeCallViewModel {
 
         case .reconnecting, .remoteDisconnected:
             // Mạng rớt giữa cuộc gọi — báo cho user, đồng hồ vẫn giữ nguyên tới khi phục hồi/kết thúc.
-            onStatusText?("Đang kết nối lại…")
+            onStatusText?(CallStrings.current.statusReconnecting)
 
         case .reconnected, .remoteReconnected:
             if phase == .established { onStatusText?(formattedDuration()) }
@@ -159,7 +163,7 @@ final class FreeCallViewModel {
     private func notifyAudioRoute() {
         let route = call.activeAudioRoute ?? AudioRouteOption(
             id: "synthesized",
-            name: call.isSpeakerOn ? "Loa ngoài" : "iPhone",
+            name: call.isSpeakerOn ? CallStrings.current.routeSpeaker : CallStrings.current.routeBuiltIn,
             kind: call.isSpeakerOn ? .speaker : .builtin,
             isActive: true
         )
@@ -182,7 +186,7 @@ final class FreeCallViewModel {
         let wasEstablished = phase == .established
         displayTimer?.invalidate()
         displayTimer = nil
-        setPhase(.ended, status: "Cuộc gọi đã kết thúc")
+        setPhase(.ended, status: CallStrings.current.statusCallEnded)
 
         let route: CallRoute
         if wasEstablished {

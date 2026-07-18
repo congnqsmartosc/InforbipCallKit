@@ -58,8 +58,9 @@ protocol CallServiceType: AnyObject {
     func registerForIncomingCalls() throws
 
     /// CallKit/APNs path: bind the host's VoIP `PKPushCredentials` to Infobip (host calls this from
-    /// its own `PKPushRegistryDelegate.pushRegistry(_:didUpdate:for:)`).
-    func enablePush(credentials: PKPushCredentials)
+    /// its own `PKPushRegistryDelegate.pushRegistry(_:didUpdate:for:)`). `pushConfigId` overrides
+    /// `config.pushConfigId` when non-nil (lets the host choose the config at runtime).
+    func enablePush(credentials: PKPushCredentials, pushConfigId: String?)
 
     /// CallKit/APNs path: unbind push from Infobip (host calls this from
     /// `pushRegistry(_:didInvalidatePushTokenFor:)`, or on logout).
@@ -119,6 +120,12 @@ final class CallService: NSObject, CallServiceType {
     private var outgoing: (uuid: UUID, call: ActiveCall)?
     private var pendingPushCredentials: PKPushCredentials?
 
+    /// Push config id supplied at runtime by the host via `enablePush(credentials:pushConfigId:)`.
+    /// Overrides `config.pushConfigId` for the Infobip push binding.
+    private var runtimePushConfigId: String?
+    /// The push config id actually used with Infobip: the host's runtime value, else `config.pushConfigId`.
+    private var effectivePushConfigId: String? { runtimePushConfigId ?? config.pushConfigId }
+
     private(set) var subscriber: Subscriber?
     var onIncomingCall: ((ActiveCall) -> Void)?
     var onCallAnswered: ((ActiveCall) -> Void)?
@@ -174,7 +181,7 @@ final class CallService: NSObject, CallServiceType {
     }
 
     func clearSubscriber() {
-        if let token = subscriber?.token, config.pushConfigId != nil {
+        if let token = subscriber?.token, effectivePushConfigId != nil {
             infobipRTC.disablePushNotification(token)
         }
         pushRegistry?.delegate = nil
@@ -212,14 +219,15 @@ final class CallService: NSObject, CallServiceType {
 
     // MARK: - Host-driven push (CallKit / APNs path)
 
-    func enablePush(credentials: PKPushCredentials) {
-        log("host provided VoIP push credentials")
+    func enablePush(credentials: PKPushCredentials, pushConfigId: String?) {
+        if let pushConfigId = pushConfigId { runtimePushConfigId = pushConfigId }
+        log("host provided VoIP push credentials (pushConfigId=\(effectivePushConfigId ?? "nil"))")
         pendingPushCredentials = credentials
         enablePushIfPossible()
     }
 
     func disablePush() {
-        if let token = subscriber?.token, config.pushConfigId != nil {
+        if let token = subscriber?.token, effectivePushConfigId != nil {
             infobipRTC.disablePushNotification(token)
         }
         pendingPushCredentials = nil
@@ -239,14 +247,14 @@ final class CallService: NSObject, CallServiceType {
     // MARK: - Push binding
 
     private func enablePushIfPossible() {
-        guard config.pushConfigId != nil,
+        guard effectivePushConfigId != nil,
               let subscriber = subscriber,
               let credentials = pendingPushCredentials else { return }
         enablePush(token: subscriber.token, credentials: credentials)
     }
 
     private func enablePush(token: String, credentials: PKPushCredentials) {
-        guard let configId = config.pushConfigId else { return }
+        guard let configId = effectivePushConfigId else { return }
         #if DEBUG
         let debug = true
         #else

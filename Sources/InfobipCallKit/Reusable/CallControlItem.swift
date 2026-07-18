@@ -40,8 +40,15 @@ final class CallControlItem: UIControl {
             make.edges.equalToSuperview()
         }
 
-        iconContainer.layer.cornerRadius = 27
+        let diameter = CallAppearance.current.controlIconDiameter
+        iconContainer.layer.cornerRadius = diameter / 2
         iconContainer.layer.masksToBounds = true
+        // Update the xib's fixed width/height constraints in place (don't remake — that would drop
+        // the container's position constraints from the nib).
+        iconContainer.constraints.forEach { c in
+            if c.firstAttribute == .width || c.firstAttribute == .height { c.constant = diameter }
+        }
+        captionLabel.font = CallAppearance.current.captionFont
 
         addTarget(self, action: #selector(didTap), for: .touchUpInside)
         updateAppearance()
@@ -70,7 +77,7 @@ final class CallControlItem: UIControl {
     }
 
     private func updateAppearance() {
-        iconContainer.backgroundColor = isOn ? .appControlOn : .secondarySystemBackground
+        iconContainer.backgroundColor = isOn ? .appControlOn : .appControlOff
         iconView.tintColor = isOn ? .appAccent : .appTextPrimary
         if isToggle {
             iconView.image = isOn ? onIcon : offIcon

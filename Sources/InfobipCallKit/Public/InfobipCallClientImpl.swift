@@ -100,9 +100,9 @@ final class InfobipCallClientImpl: InfobipCallClient {
         service.clearSubscriber()
     }
 
-    func enablePushNotifications(credentials: PKPushCredentials) {
-        CallLog.debug("enablePushNotifications(credentials:)", category: "Client")
-        service.enablePush(credentials: credentials)
+    func enablePushNotifications(credentials: PKPushCredentials, pushConfigId: String?) {
+        CallLog.debug("enablePushNotifications(pushConfigId: \(pushConfigId ?? "config default"))", category: "Client")
+        service.enablePush(credentials: credentials, pushConfigId: pushConfigId)
     }
 
     func disablePushNotifications() {
@@ -213,6 +213,12 @@ final class InfobipCallClientImpl: InfobipCallClient {
         CallLog.debug("setSpeakerOn(\(speakerOn))", category: "Client")
         guard let call = currentCall else { throw InfobipCallError.noActiveCall }
         call.setSpeakerphone(speakerOn)
+    }
+
+    func selectAudioRoute(id: String) async throws {
+        CallLog.debug("selectAudioRoute(\(id))", category: "Client")
+        guard let call = currentCall else { throw InfobipCallError.noActiveCall }
+        call.selectAudioRoute(id: id)
     }
 
     // MARK: Binding ActiveCall -> CallSession

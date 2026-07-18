@@ -22,6 +22,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and this pro
 - Counterpart name resolution now prefers the app-provided display name (customData) over the SDK
   endpoint's raw identifier.
 
+## [Unreleased]
+
+### Added — host-configurable call UI
+- **`InfobipCallAppearance`** (on `InfobipCallConfig.appearance`): full visual config — colors
+  (incl. text/surface/gradient), fonts, metrics, an `InfobipCallIcons` set, and avatar. Supersedes
+  the 4-color `InfobipCallTheme`, which still works and maps into it. Colors are dynamic-capable
+  (light/dark).
+- **`InfobipCallStrings`** (on `InfobipCallConfig.strings`): every user-facing string with English
+  defaults — replacing the previously hardcoded (mostly Vietnamese) literals across all call screens.
+- **`InfobipCallUIProviding`** (on `InfobipCallCenter.uiProvider`): supply your own view controllers
+  for any call screen — `makeInCallScreen` / `makeIncomingBanner` / `makeAudioRouteSheet` /
+  `makeUnreachableScreen` / `makeKeypad`. Each returns `nil` (default) for the built-in screen, or a
+  `UIViewController` driven by a per-scene context (`InCallContext`, `IncomingCallContext`,
+  `AudioRouteContext`, `UnreachableContext`, `KeypadContext`). The pod keeps owning call state,
+  CallKit, ringtone, and navigation/teardown.
+- **Public audio-route control:** `AudioRoute` type, `client.selectAudioRoute(id:)`, and
+  `CallSession.audioRoutes` / `activeAudioRoute` (for custom audio pickers). `client.retryLastCall()`
+  is now public.
+- **Runtime appearance/strings switching:** `InfobipCallCenter.updateAppearance(_:)` and
+  `updateStrings(_:)` swap the built-in UI's look/text at runtime (applies to the next call screen).
+- **Runtime push-config id:** `client.enablePushNotifications(credentials:pushConfigId:)` lets the
+  host supply the Infobip WebRTC push-config id at enable time (e.g. from remote config), overriding
+  `InfobipCallConfig.pushConfigId`. The old `enablePushNotifications(credentials:)` still works.
+
+### Changed
+- **Post-call "unreachable" screen** now shows only **Try again** (promoted to the primary button);
+  the **Send a message** option was removed (`UnreachableContext.sendMessage` removed too).
+
+### Fixed
+- **Dark mode:** the in-call/unreachable/keypad background gradient no longer stays white in dark
+  mode; gradient colors are resolved against the trait collection and re-resolved on Light/Dark change.
+
+### Example
+- The setup screen adds a **Theme** picker (Teal / Indigo, incl. fonts) and a **Language** picker
+  (English / Tiếng Việt) driving `updateAppearance` / `updateStrings`, and passes `pushConfigId` at
+  runtime via `enablePushNotifications(credentials:pushConfigId:)`.
+
+### Notes
+- Adding public enum cases / config fields is additive; existing hosts (incl. `config.theme`-only)
+  compile and look unchanged. Per-region "slot" injection into the built-in in-call screen is not
+  included — compose a full custom screen instead.
+
 ## [1.3.0]
 
 ### Added

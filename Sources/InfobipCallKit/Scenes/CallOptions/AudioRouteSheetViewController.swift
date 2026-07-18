@@ -46,8 +46,8 @@ final class AudioRouteSheetViewController: UIViewController {
         // Phòng hờ SDK chưa trả thiết bị nào: tối thiểu vẫn cho chọn iPhone / Loa ngoài.
         if routes.isEmpty {
             routes = [
-                AudioRouteOption(id: "fallback-builtin", name: "iPhone", kind: .builtin, isActive: !call.isSpeakerOn),
-                AudioRouteOption(id: "fallback-speaker", name: "Loa ngoài", kind: .speaker, isActive: call.isSpeakerOn)
+                AudioRouteOption(id: "fallback-builtin", name: CallStrings.current.routeBuiltIn, kind: .builtin, isActive: !call.isSpeakerOn),
+                AudioRouteOption(id: "fallback-speaker", name: CallStrings.current.routeSpeaker, kind: .speaker, isActive: call.isSpeakerOn)
             ]
         }
 
@@ -56,7 +56,7 @@ final class AudioRouteSheetViewController: UIViewController {
         card.layer.cornerCurve = .continuous
 
         let title = UILabel()
-        title.text = "Nguồn âm thanh"
+        title.text = CallStrings.current.audioSourceTitle
         title.font = .systemFont(ofSize: 17, weight: .semibold)
         title.textColor = .appTextPrimary
         title.textAlignment = .center

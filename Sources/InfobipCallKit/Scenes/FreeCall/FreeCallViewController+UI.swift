@@ -5,33 +5,39 @@ import SnapKit
 extension FreeCallViewController {
 
     func setupBackground() {
-        view.backgroundColor = .systemBackground
-        gradientLayer.colors = [
-            UIColor.white.cgColor,
-            UIColor.appAccent.withAlphaComponent(0.12).cgColor
-        ]
+        view.backgroundColor = .appSurface
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
         view.layer.insertSublayer(gradientLayer, at: 0)
+        applyGradientColors()
+    }
+
+    /// Resolve the appearance's gradient colors against the current trait collection. `CAGradientLayer`
+    /// holds `cgColor`s that don't auto-update, so the VC re-calls this on `traitCollectionDidChange`.
+    func applyGradientColors() {
+        gradientLayer.applyCallBackground(for: view.traitCollection)
     }
 
     func setupUI() {
-        titleLabel.text = "Free call"
-        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        let appearance = CallAppearance.current
+        let strings = CallStrings.current
+
+        titleLabel.text = strings.callTitle
+        titleLabel.font = appearance.titleFont
         titleLabel.textColor = .appTextPrimary
         titleLabel.textAlignment = .center
 
-        subtitleLabel.font = .systemFont(ofSize: 15, weight: .regular)
+        subtitleLabel.font = appearance.statusFont
         subtitleLabel.textColor = .appTextSecondary
         subtitleLabel.textAlignment = .center
 
-        avatarView.image = UIImage(systemName: "person.crop.circle.fill")
-        avatarView.tintColor = .systemGray3
+        avatarView.image = appearance.avatarPlaceholder
+        avatarView.tintColor = appearance.avatarPlaceholderTint
         avatarView.contentMode = .scaleAspectFill
         avatarView.clipsToBounds = true
-        avatarView.layer.cornerRadius = 60
+        avatarView.layer.cornerRadius = appearance.resolvedAvatarCornerRadius
 
-        nameLabel.font = .systemFont(ofSize: 22, weight: .semibold)
+        nameLabel.font = appearance.nameFont
         nameLabel.textColor = .appTextPrimary
         nameLabel.textAlignment = .center
 
@@ -39,22 +45,22 @@ extension FreeCallViewController {
         controlStack.axis = .horizontal
         controlStack.distribution = .fill
         controlStack.alignment = .top
-        controlStack.spacing = 72
+        controlStack.spacing = appearance.controlSpacing
 
-        speakerControl.configure(icon: UIImage(systemName: "speaker.wave.2.fill"), caption: "Speaker")
+        speakerControl.configure(icon: appearance.icons.speaker, caption: strings.speaker)
         muteControl.configureToggle(
-            offIcon: UIImage(systemName: "mic.fill"),
-            onIcon: UIImage(systemName: "mic.slash.fill"),
-            offCaption: "Mute",
-            onCaption: "Unmute"
+            offIcon: appearance.icons.mute,
+            onIcon: appearance.icons.unmute,
+            offCaption: strings.mute,
+            onCaption: strings.unmute
         )
 
-        declineButton.configure(icon: UIImage(systemName: "xmark"), background: .appDecline, pointSize: 26)
-        acceptButton.configure(icon: UIImage(systemName: "phone.fill"), background: .appAccept, pointSize: 26)
+        declineButton.configure(icon: appearance.icons.decline, background: .appDecline, pointSize: 26)
+        acceptButton.configure(icon: appearance.icons.accept, background: .appAccept, pointSize: 26)
 
         actionStack.axis = .horizontal
         actionStack.alignment = .center
-        actionStack.spacing = 72
+        actionStack.spacing = appearance.controlSpacing
         actionStack.addArrangedSubview(declineButton)
         actionStack.addArrangedSubview(acceptButton)
 
@@ -73,7 +79,7 @@ extension FreeCallViewController {
         avatarView.snp.makeConstraints { make in
             make.top.equalTo(subtitleLabel.snp.bottom).offset(24)
             make.centerX.equalToSuperview()
-            make.size.equalTo(120)
+            make.size.equalTo(appearance.avatarSize)
         }
         nameLabel.snp.makeConstraints { make in
             make.top.equalTo(avatarView.snp.bottom).offset(16)

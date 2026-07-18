@@ -87,7 +87,11 @@ public protocol InfobipCallClient: AnyObject {
     /// token to Infobip so its server can send VoIP pushes. Safe to call before or after
     /// ``registerSubscriber(identity:displayName:token:imageURL:)`` — binding happens once both the
     /// credentials and the subscriber token are available.
-    func enablePushNotifications(credentials: PKPushCredentials)
+    ///
+    /// - Parameter pushConfigId: the Infobip WebRTC push-configuration id to register with. When
+    ///   `nil`, `InfobipCallConfig.pushConfigId` is used. Pass a value to choose it at runtime (e.g.
+    ///   from remote config / per environment) without hardcoding it in the config.
+    func enablePushNotifications(credentials: PKPushCredentials, pushConfigId: String?)
 
     /// Unbind VoIP push from Infobip. Call from `pushRegistry(_:didInvalidatePushTokenFor:)` or on
     /// logout (``clearSubscriber()`` also unbinds).
@@ -139,9 +143,22 @@ public protocol InfobipCallClient: AnyObject {
     func hangUp() async throws
     func setMuted(_ muted: Bool) async throws
     func setSpeakerOn(_ speakerOn: Bool) async throws
+
+    /// Select an audio output by its ``AudioRoute/id`` (from ``CallSession/audioRoutes``). For
+    /// building a custom audio-route picker.
+    func selectAudioRoute(id: String) async throws
+
+    /// Redial the most recent outgoing call (e.g. from a custom "unreachable" screen's retry).
+    @discardableResult
+    func retryLastCall() async throws -> CallSession
 }
 
 public extension InfobipCallClient {
+    /// Convenience overload using `InfobipCallConfig.pushConfigId`.
+    func enablePushNotifications(credentials: PKPushCredentials) {
+        enablePushNotifications(credentials: credentials, pushConfigId: nil)
+    }
+
     /// Convenience overload matching the Android default argument.
     func startOutgoingCall(destinationIdentity: String) async throws -> CallSession {
         try await startOutgoingCall(destinationIdentity: destinationIdentity, displayName: nil, imageURL: nil, customData: [:])

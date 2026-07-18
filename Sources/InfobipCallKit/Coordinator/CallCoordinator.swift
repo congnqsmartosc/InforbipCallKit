@@ -19,6 +19,13 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
     /// Host hand-offs (open chat, etc).
     weak var hostDelegate: InfobipCallHostDelegate?
 
+    /// Optional host UI provider for custom call screens (Layer 2).
+    weak var uiProvider: InfobipCallUIProviding?
+
+    /// Retains the drivers behind host-supplied custom screens for the call's lifetime (so a host
+    /// that doesn't itself retain the context can't cause its driver to deallocate). Cleared on teardown.
+    private var retainedContexts: [AnyObject] = []
+
     init(config: InfobipCallConfig) {
         self.config = config
         super.init(initialRoute: nil)
@@ -54,13 +61,33 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
             return showFreeCall(mode: mode)
 
         case .audioRoutes(let call):
-            let vc = AudioRouteSheetViewController(call: call)
-            vc.router = unownedRouter
+            let context = AudioRouteContext(
+                routes: call.audioRoutes.map(AudioRoute.init),
+                onSelect: { [weak call] id in call?.selectAudioRoute(id: id) },
+                onDismiss: { [weak self] in self?.trigger(.dismiss) }
+            )
+            let vc: UIViewController
+            if let custom = uiProvider?.makeAudioRouteSheet(context) {
+                retainedContexts.append(context)
+                vc = custom
+            } else {
+                let sheet = AudioRouteSheetViewController(call: call)
+                sheet.router = unownedRouter
+                vc = sheet
+            }
             return .present(vc)
 
         case .keypad(let callerName):
-            let vc = KeypadViewController(callerName: callerName)
-            vc.router = unownedRouter
+            let context = KeypadContext(callerName: callerName, onClose: { [weak self] in self?.trigger(.closeKeypad) })
+            let vc: UIViewController
+            if let custom = uiProvider?.makeKeypad(context) {
+                retainedContexts.append(context)
+                vc = custom
+            } else {
+                let pad = KeypadViewController(callerName: callerName)
+                pad.router = unownedRouter
+                vc = pad
+            }
             return .push(vc)
 
         case .closeKeypad:
@@ -72,11 +99,23 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
             return .none()
 
         case .callUnreachable(let name, let destinationIdentity):
-            let vc = CallUnreachableViewController(callerName: name, destinationIdentity: destinationIdentity)
-            vc.router = unownedRouter
-            // Replace the dead call screen so back-swipe can't return to it.
+            let context = UnreachableContext(
+                peerName: name,
+                onRetry: { [weak self] in self?.trigger(.retryCall(destinationIdentity: destinationIdentity)) },
+                onClose: { [weak self] in self?.trigger(.backToHome) }
+            )
+            let vc: UIViewController
+            if let custom = uiProvider?.makeUnreachableScreen(context) {
+                retainedContexts.append(context)
+                vc = custom
+            } else {
+                let unreachable = CallUnreachableViewController(callerName: name, destinationIdentity: destinationIdentity)
+                unreachable.router = unownedRouter
+                vc = unreachable
+            }
+            // Replace the dead in-call screen (built-in or custom) so back-swipe can't return to it.
             var stack = rootViewController.viewControllers
-            if stack.last is FreeCallViewController { stack.removeLast() }
+            if !stack.isEmpty { stack.removeLast() }
             stack.append(vc)
             rootViewController.setViewControllers(stack, animated: true)
             return .none()
@@ -125,7 +164,14 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
         }
 
         let viewModel = IncomingCallViewModel(call: call, router: unownedRouter)
-        let banner = IncomingCallViewController(viewModel: viewModel)
+        let banner: UIViewController
+        let context = IncomingCallContext(viewModel: viewModel)
+        if let custom = uiProvider?.makeIncomingBanner(context) {
+            retainedContexts.append(context)
+            banner = custom
+        } else {
+            banner = IncomingCallViewController(viewModel: viewModel)
+        }
 
         if rootViewController.presentedViewController != nil {
             rootViewController.dismiss(animated: false) { [weak self] in
@@ -170,7 +216,17 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
         }
 
         let viewModel = FreeCallViewModel(call: call, autoAccept: autoAccept, alreadyAnswered: alreadyAnswered, router: unownedRouter)
-        let vc = FreeCallViewController(viewModel: viewModel)
+
+        // Layer 2: let the host fully own the in-call screen. The context wraps the same driver, so
+        // routing/teardown are unchanged; the host VC calls `context.start()` in its viewDidLoad.
+        let vc: UIViewController
+        let context = InCallContext(viewModel: viewModel)
+        if let custom = uiProvider?.makeInCallScreen(context) {
+            retainedContexts.append(context)   // retain the driver for the call's lifetime
+            vc = custom
+        } else {
+            vc = FreeCallViewController(viewModel: viewModel)
+        }
 
         if rootViewController.presentedViewController != nil {
             rootViewController.dismiss(animated: true) { [weak self] in
@@ -185,6 +241,7 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
 
     private func finishFlow() {
         ringtonePlayer.stop()
+        retainedContexts.removeAll()
         if rootViewController.presentedViewController != nil {
             rootViewController.dismiss(animated: false, completion: nil)
         }
@@ -225,15 +282,16 @@ final class CallCoordinator: NavigationCoordinator<CallRoute> {
     }
 
     private func showMicDeniedAlert() {
+        let strings = CallStrings.current
         let alert = UIAlertController(
-            title: NSLocalizedString("Microphone access needed", comment: ""),
-            message: NSLocalizedString("Please allow microphone access in Settings to make calls.", comment: ""),
+            title: strings.micPermissionTitle,
+            message: strings.micPermissionMessage,
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: NSLocalizedString("Open Settings", comment: ""), style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: strings.micOpenSettings, style: .default) { [weak self] _ in
             self?.trigger(.openSettings)
         })
-        alert.addAction(UIAlertAction(title: NSLocalizedString("Dismiss", comment: ""), style: .cancel) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: strings.micDismiss, style: .cancel) { [weak self] _ in
             self?.trigger(.backToHome)
         })
         rootViewController.present(alert, animated: true)

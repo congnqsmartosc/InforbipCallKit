@@ -56,13 +56,21 @@ final class FreeCallViewController: UIViewController {
         gradientLayer.frame = view.bounds
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        // CAGradientLayer cgColors don't auto-update on Light/Dark change — re-resolve them.
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            applyGradientColors()
+        }
+    }
+
     // MARK: - Binding
 
     private func bindViewModel() {
         nameLabel.text = viewModel.callerName
         avatarView.sd_setImage(
             with: viewModel.avatarURL,
-            placeholderImage: UIImage(systemName: "person.crop.circle.fill")
+            placeholderImage: CallAppearance.current.avatarPlaceholder
         )
 
         viewModel.onStatusText = { [weak self] text in
@@ -86,24 +94,26 @@ final class FreeCallViewController: UIViewController {
 
     /// Icon control "Speaker" phản ánh thiết bị đang phát: loa ngoài / iPhone / Bluetooth / tai nghe.
     private func applyAudioRoute(_ route: AudioRouteOption) {
+        let strings = CallStrings.current
+        let icons = CallAppearance.current.icons
         let caption: String
-        let iconName: String
+        let icon: UIImage?
         switch route.kind {
         case .builtin, .speaker:
             // Loa trong/ngoài giữ icon Speaker quen thuộc; phân biệt bằng trạng thái sáng.
-            caption = "Speaker"
-            iconName = "speaker.wave.2.fill"
+            caption = strings.speaker
+            icon = icons.speaker
         case .bluetooth:
-            caption = "Bluetooth"
-            iconName = route.iconName
+            caption = strings.bluetooth
+            icon = icons.bluetooth
         case .wired:
-            caption = "Headphones"
-            iconName = route.iconName
+            caption = strings.headphones
+            icon = icons.headphones
         case .other:
-            caption = "Audio"
-            iconName = route.iconName
+            caption = strings.audioGeneric
+            icon = icons.audioGeneric
         }
-        speakerControl.configure(icon: UIImage(systemName: iconName), caption: caption)
+        speakerControl.configure(icon: icon, caption: caption)
         // Sáng icon khi KHÔNG phải loa trong mặc định (đang ở loa ngoài / Bluetooth / tai nghe).
         speakerControl.isOn = route.kind != .builtin
     }

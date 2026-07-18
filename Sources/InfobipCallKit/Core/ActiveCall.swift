@@ -174,8 +174,8 @@ final class ActiveCall: NSObject {
 
     private static func displayName(for device: AudioDevice) -> String {
         switch kind(of: device) {
-        case .builtin: return "iPhone"
-        case .speaker: return "Loa ngoài"
+        case .builtin: return CallStrings.current.routeBuiltIn
+        case .speaker: return CallStrings.current.routeSpeaker
         case .bluetooth, .wired, .other: return device.name
         }
     }

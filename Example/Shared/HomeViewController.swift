@@ -19,8 +19,61 @@ final class HomeViewController: UIViewController {
 
     private var myIdentity: String?
     private let roleControl = UISegmentedControl(items: ["driver", "customer"])
+    private let themeControl = UISegmentedControl(items: ["Teal", "Indigo"])
+    private let languageControl = UISegmentedControl(items: ["English", "Tiếng Việt"])
     private let statusLabel = UILabel()
     private let callButton = UIButton(type: .system)
+
+    /// Two demo call-UI themes the host can switch between at runtime (colors + fonts + strings).
+    private static let tealTheme = InfobipCallAppearance(
+        accent: .systemTeal,
+        gradientBottom: UIColor.systemTeal.withAlphaComponent(0.14)
+    )
+    private static let indigoTheme = InfobipCallAppearance(
+        accent: .systemIndigo,
+        gradientBottom: UIColor.systemIndigo.withAlphaComponent(0.16),
+        titleFont: HomeViewController.rounded(17, .semibold),
+        nameFont: HomeViewController.rounded(24, .bold),
+        statusFont: HomeViewController.rounded(15, .regular),
+        buttonFont: HomeViewController.rounded(16, .semibold)
+    )
+
+    private static func rounded(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
+        let base = UIFont.systemFont(ofSize: size, weight: weight)
+        guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
+        return UIFont(descriptor: descriptor, size: size)
+    }
+
+    /// Two in-code language packs for the call UI. English is the pod default; Vietnamese overrides
+    /// every string. A real app could build these from `NSLocalizedString` / a String Catalog.
+    private static let englishStrings = InfobipCallStrings()   // English defaults
+    private static let vietnameseStrings = InfobipCallStrings(
+        callTitle: "Cuộc gọi",
+        statusConnecting: "Đang kết nối…",
+        statusRinging: "Đang đổ chuông…",
+        statusReconnecting: "Đang kết nối lại…",
+        statusIncoming: "Đang gọi bạn",
+        statusCallEnded: "Cuộc gọi đã kết thúc",
+        speaker: "Loa",
+        mute: "Tắt tiếng",
+        unmute: "Bật tiếng",
+        bluetooth: "Bluetooth",
+        headphones: "Tai nghe",
+        audioGeneric: "Âm thanh",
+        audioSourceTitle: "Nguồn âm thanh",
+        routeBuiltIn: "iPhone",
+        routeSpeaker: "Loa ngoài",
+        incomingBrandLabel: "Cuộc gọi đến",
+        unreachableTitle: "Cuộc gọi",
+        unreachableHeadline: "Người nhận không trả lời",
+        unreachableSubtitle: "Họ có thể đang không sẵn sàng.\nThử lại?",
+        tryAgain: "Thử lại",
+        sendMessage: "Gửi tin nhắn",
+        micPermissionTitle: "Cần quyền micro",
+        micPermissionMessage: "Vui lòng cho phép truy cập micro trong Cài đặt để thực hiện cuộc gọi.",
+        micOpenSettings: "Mở Cài đặt",
+        micDismiss: "Bỏ qua"
+    )
 
     /// Retain the event observation for the lifetime of this screen.
     private var eventToken: ObservationToken?
@@ -41,6 +94,8 @@ final class HomeViewController: UIViewController {
         setupUI()
         observeCallEvents()
         restoreSavedIdentity()
+        applySelectedTheme()      // default call-UI appearance
+        applySelectedLanguage()   // default call-UI language
     }
 
     /// On launch, re-register the previously-picked identity so the Infobip push binding stays alive
@@ -87,6 +142,22 @@ final class HomeViewController: UIViewController {
         roleControl.selectedSegmentIndex = UISegmentedControl.noSegment
         roleControl.addTarget(self, action: #selector(didPickRole), for: .valueChanged)
 
+        let themeCaption = UILabel()
+        themeCaption.text = "Call UI theme"
+        themeCaption.font = .systemFont(ofSize: 13, weight: .medium)
+        themeCaption.textColor = .secondaryLabel
+        themeCaption.textAlignment = .center
+        themeControl.selectedSegmentIndex = 0
+        themeControl.addTarget(self, action: #selector(didPickTheme), for: .valueChanged)
+
+        let languageCaption = UILabel()
+        languageCaption.text = "Call UI language"
+        languageCaption.font = .systemFont(ofSize: 13, weight: .medium)
+        languageCaption.textColor = .secondaryLabel
+        languageCaption.textAlignment = .center
+        languageControl.selectedSegmentIndex = 0
+        languageControl.addTarget(self, action: #selector(didPickLanguage), for: .valueChanged)
+
         statusLabel.text = "Pick a role to register and listen for calls."
         statusLabel.font = .systemFont(ofSize: 13)
         statusLabel.textColor = .secondaryLabel
@@ -98,7 +169,7 @@ final class HomeViewController: UIViewController {
         callButton.isEnabled = false
         callButton.addTarget(self, action: #selector(didTapCall), for: .touchUpInside)
 
-        let stack = UIStackView(arrangedSubviews: [title, roleControl, statusLabel, callButton])
+        let stack = UIStackView(arrangedSubviews: [title, roleControl, themeCaption, themeControl, languageCaption, languageControl, statusLabel, callButton])
         stack.axis = .vertical
         stack.spacing = 20
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -114,6 +185,22 @@ final class HomeViewController: UIViewController {
         let identity = identities[roleControl.selectedSegmentIndex]
         UserDefaults.standard.set(identity, forKey: Self.savedIdentityKey)
         register(identity: identity)
+    }
+
+    /// Switch the call-UI theme (appearance only) at runtime — applies to the next call screen.
+    @objc private func didPickTheme() { applySelectedTheme() }
+
+    private func applySelectedTheme() {
+        let isIndigo = themeControl.selectedSegmentIndex == 1
+        center.updateAppearance(isIndigo ? Self.indigoTheme : Self.tealTheme)
+    }
+
+    /// Switch the call-UI language at runtime — applies to the next call screen.
+    @objc private func didPickLanguage() { applySelectedLanguage() }
+
+    private func applySelectedLanguage() {
+        let isVietnamese = languageControl.selectedSegmentIndex == 1
+        center.updateStrings(isVietnamese ? Self.vietnameseStrings : Self.englishStrings)
     }
 
     private func register(identity: String) {

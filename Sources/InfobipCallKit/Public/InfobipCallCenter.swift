@@ -22,6 +22,12 @@ public final class InfobipCallCenter {
         didSet { coordinator.hostDelegate = hostDelegate }
     }
 
+    /// Optional provider of custom call screens (see ``InfobipCallUIProviding``). When `nil` (default)
+    /// the built-in screens are used, styled by `config.appearance` / `config.strings`.
+    public weak var uiProvider: InfobipCallUIProviding? {
+        didSet { coordinator.uiProvider = uiProvider }
+    }
+
     private let impl: InfobipCallClientImpl
     private let coordinator: CallCoordinator
     private weak var hostWindow: UIWindow?
@@ -34,6 +40,8 @@ public final class InfobipCallCenter {
     public init(config: InfobipCallConfig = InfobipCallConfig()) {
         CallLog.isEnabled = config.isLoggingEnabled
         CallTheme.current = config.theme
+        CallAppearance.current = config.resolvedAppearance
+        CallStrings.current = config.strings
         CallLog.debug("InfobipCallCenter initialized (pushConfigId=\(config.pushConfigId ?? "nil"))", category: "Center")
 
         let service = CallService(config: config)
@@ -66,6 +74,17 @@ public final class InfobipCallCenter {
     /// window scene for the overlay call window.
     public func install(on window: UIWindow) {
         hostWindow = window
+    }
+
+    /// Swap the built-in call UI's appearance at runtime (e.g. from a settings screen). Takes effect
+    /// on the next call screen presented; does not restyle a call already on screen.
+    public func updateAppearance(_ appearance: InfobipCallAppearance) {
+        CallAppearance.current = appearance
+    }
+
+    /// Swap the built-in call UI's strings at runtime. Takes effect on the next call screen.
+    public func updateStrings(_ strings: InfobipCallStrings) {
+        CallStrings.current = strings
     }
 
     /// Set up CallKit (create the `CXProvider`) — call when the app actually starts using Infobip.

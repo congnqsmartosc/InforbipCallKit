@@ -2,7 +2,7 @@
 
 A drop-in WebRTC calling experience for iOS, wrapping the **Infobip RTC SDK**. InfobipCallKit
 ships the complete calling UI — incoming banner, in-call screen, ringtone/ringback, mute/speaker,
-audio-route picker, post-call feedback, and "recipient unreachable" — and presents it all on its
+audio-route picker, and "recipient unreachable" — and presents it all on its
 own overlay window, so it never fights your app's navigation.
 
 The public API mirrors the Android `InfobipCallClient` interface, so both platforms integrate the
@@ -287,7 +287,9 @@ extension AppDelegate: PKPushRegistryDelegate {
     // Device token → Infobip (its server uses it to send VoIP pushes).
     func pushRegistry(_ r: PKPushRegistry, didUpdate creds: PKPushCredentials, for type: PKPushType) {
         guard type == .voIP else { return }
-        callCenter.client.enablePushNotifications(credentials: creds)
+        // Pass pushConfigId here to choose it at runtime (overrides InfobipCallConfig.pushConfigId);
+        // omit it to use the config value. With a runtime-only id, set `enableCallKit: true` in config.
+        callCenter.client.enablePushNotifications(credentials: creds, pushConfigId: "your-push-config-id")
     }
 
     func pushRegistry(_ r: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
@@ -324,12 +326,59 @@ behave the same in both modes.
 
 ## Host hand-offs
 
-Actions the UI surfaces but your app owns, via `InfobipCallHostDelegate`:
+`InfobipCallHostDelegate` lets your app own actions the calling flow may hand off:
 
 ```swift
-func callRequestsChat(peerName: String)                        // "Message" button
-func callDidFinish(withFeedbackRating rating: Int?, reasons: [String])  // post-call feedback
+func callRequestsChat(peerName: String)   // "message this peer" hand-off
 ```
+
+> The built-in screens don't currently trigger this (the post-call screen shows **Try again** only).
+> It remains available for custom screens (via a `uiProvider`) that want to hand off to your chat.
+
+## Customizing the call UI
+
+Three opt-in levels — use only what you need; everything defaults to the built-in look.
+
+**1. Restyle & localize (appearance + strings).** Pass `appearance` / `strings` in `InfobipCallConfig`:
+
+```swift
+InfobipCallCenter(config: InfobipCallConfig(
+    appearance: InfobipCallAppearance(
+        accent: .systemIndigo,                 // colors, fonts, metrics, icons, gradient, avatar…
+        // colors accept dynamic light/dark values: UIColor { $0.userInterfaceStyle == .dark ? … : … }
+        gradientBottom: UIColor.systemIndigo.withAlphaComponent(0.15)
+    ),
+    strings: InfobipCallStrings(callTitle: "GSM Call", statusRinging: "Ringing…")  // override any subset
+))
+```
+
+The built-in screens are dark-mode-aware; supply dynamic `UIColor`s to control both modes. The old
+4-color `theme:` still works and maps into `appearance`.
+
+Switch either at **runtime** (e.g. from a settings screen — the Example has Theme + Language pickers);
+takes effect on the next call screen:
+
+```swift
+center.updateAppearance(myBrandAppearance)   // colors / fonts / icons
+center.updateStrings(vietnameseStrings)       // localize the whole call UI
+```
+
+**2. Fully custom screens.** Set `center.uiProvider` and return your own `UIViewController` per scene;
+return `nil` (default) to keep the built-in one. Your controller drives the call through a context —
+the pod still owns call state, CallKit, ringtone, and navigation/teardown:
+
+```swift
+center.uiProvider = self
+
+func makeInCallScreen(_ context: InCallContext) -> UIViewController? {
+    MyInCallVC(context: context)   // in viewDidLoad: context.start(); bind context.onPhaseChange/…;
+}                                   // buttons call context.accept()/hangUp()/toggleMute()/…
+// also: makeIncomingBanner, makeAudioRouteSheet, makeUnreachableScreen, makeKeypad
+```
+
+**3. Custom components** — build a mostly-standard screen with your own pieces by returning a full
+custom screen (level 2) that composes the built-in reusable views with your own. (Per-region "slot"
+injection into the built-in screen is not yet exposed.)
 
 ## Example app
 

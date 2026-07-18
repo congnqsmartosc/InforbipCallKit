@@ -51,15 +51,19 @@ final class KeypadViewController: UIViewController {
         gradientLayer.frame = view.bounds
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            gradientLayer.applyCallBackground(for: view.traitCollection)
+        }
+    }
+
     private func setupBackground() {
-        view.backgroundColor = .systemBackground
-        gradientLayer.colors = [
-            UIColor.white.cgColor,
-            UIColor.appAccent.withAlphaComponent(0.12).cgColor
-        ]
+        view.backgroundColor = .appSurface
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
         view.layer.insertSublayer(gradientLayer, at: 0)
+        gradientLayer.applyCallBackground(for: view.traitCollection)
     }
 
     private func setupUI() {
@@ -89,11 +93,11 @@ final class KeypadViewController: UIViewController {
 
         // Hàng nút dưới: ẩn phím / kết thúc
         let hideButton = CircleIconButton(diameter: 56)
-        hideButton.configure(icon: UIImage(systemName: "chevron.down"), background: .secondarySystemBackground, tint: .appTextPrimary, pointSize: 20)
+        hideButton.configure(icon: CallAppearance.current.icons.keypadHide, background: .appControlOff, tint: .appTextPrimary, pointSize: 20)
         hideButton.addTarget(self, action: #selector(tapHide), for: .touchUpInside)
 
         let endButton = CircleIconButton(diameter: 68)
-        endButton.configure(icon: UIImage(systemName: "phone.down.fill"), background: .appDecline, pointSize: 26)
+        endButton.configure(icon: CallAppearance.current.icons.hangup, background: .appDecline, pointSize: 26)
         endButton.addTarget(self, action: #selector(tapEnd), for: .touchUpInside)
 
         let spacer = UIView()

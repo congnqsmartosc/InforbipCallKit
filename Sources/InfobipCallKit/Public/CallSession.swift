@@ -46,6 +46,12 @@ public struct CallSession: Equatable {
 
     /// Why the call ended. Non-nil only when `status == .ended`.
     public internal(set) var endReason: CallEndReason?
+
+    /// Available audio outputs for this call (for a custom audio-route picker).
+    public internal(set) var audioRoutes: [AudioRoute]
+
+    /// The currently active audio output, if known.
+    public internal(set) var activeAudioRoute: AudioRoute?
 }
 
 extension CallSession {
@@ -62,5 +68,7 @@ extension CallSession {
         self.durationSeconds = activeCall.durationSeconds
         self.networkQuality = nil
         self.endReason = nil
+        self.audioRoutes = activeCall.audioRoutes.map(AudioRoute.init)
+        self.activeAudioRoute = activeCall.activeAudioRoute.map(AudioRoute.init)
     }
 }

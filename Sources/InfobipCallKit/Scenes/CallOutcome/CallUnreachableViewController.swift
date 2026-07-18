@@ -43,15 +43,19 @@ final class CallUnreachableViewController: UIViewController {
         gradientLayer.frame = view.bounds
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            gradientLayer.applyCallBackground(for: view.traitCollection)
+        }
+    }
+
     private func setupBackground() {
-        view.backgroundColor = .systemBackground
-        gradientLayer.colors = [
-            UIColor.white.cgColor,
-            UIColor.appAccent.withAlphaComponent(0.12).cgColor
-        ]
+        view.backgroundColor = .appSurface
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
         view.layer.insertSublayer(gradientLayer, at: 0)
+        gradientLayer.applyCallBackground(for: view.traitCollection)
     }
 
     private func setupUI() {
@@ -64,32 +68,28 @@ final class CallUnreachableViewController: UIViewController {
         )
         closeButton.addTarget(self, action: #selector(tapClose), for: .touchUpInside)
 
-        let titleLabel = makeLabel("Free call", size: 17, weight: .semibold, color: .appTextPrimary)
-        let statusLabel = makeLabel("The recipient refused call", size: 15, weight: .regular, color: .appDecline)
+        let strings = CallStrings.current
+        let titleLabel = makeLabel(strings.unreachableTitle, size: 17, weight: .semibold, color: .appTextPrimary)
+        let statusLabel = makeLabel(strings.unreachableHeadline, size: 15, weight: .regular, color: .appDecline)
 
-        let avatar = UIImageView(image: UIImage(systemName: "person.crop.circle.fill"))
-        avatar.tintColor = .systemGray3
+        let avatar = UIImageView(image: CallAppearance.current.avatarPlaceholder)
+        avatar.tintColor = CallAppearance.current.avatarPlaceholderTint
         avatar.contentMode = .scaleAspectFit
 
         let nameLabel = makeLabel(callerName, size: 22, weight: .semibold, color: .appTextPrimary)
 
         let messageLabel = makeLabel(
-            "Traveling on the road may affect the driver's ability to receive calls.\nTry again?",
+            strings.unreachableSubtitle,
             size: 14, weight: .regular, color: .appTextSecondary
         )
         messageLabel.numberOfLines = 0
 
         let tryAgainButton = CallOptionButton()
-        tryAgainButton.configure(style: .secondary, title: "Try again")
+        tryAgainButton.configure(style: .primary, title: strings.tryAgain)
         tryAgainButton.addTarget(self, action: #selector(tapTryAgain), for: .touchUpInside)
 
-        let sendMessageButton = CallOptionButton()
-        sendMessageButton.configure(style: .primary, title: "Send a message", icon: UIImage(systemName: "message.fill"))
-        sendMessageButton.backgroundColor = .appAccept   // xanh lá như prototype
-        sendMessageButton.addTarget(self, action: #selector(tapSendMessage), for: .touchUpInside)
-
         [closeButton, titleLabel, statusLabel, avatar, nameLabel, messageLabel,
-         tryAgainButton, sendMessageButton].forEach {
+         tryAgainButton].forEach {
             view.addSubview($0)
         }
 
@@ -119,12 +119,8 @@ final class CallUnreachableViewController: UIViewController {
             make.top.equalTo(nameLabel.snp.bottom).offset(24)
             make.leading.trailing.equalTo(guide).inset(32)
         }
-        sendMessageButton.snp.makeConstraints { make in
-            make.bottom.equalTo(guide).offset(-24)
-            make.leading.trailing.equalTo(guide).inset(24)
-        }
         tryAgainButton.snp.makeConstraints { make in
-            make.bottom.equalTo(sendMessageButton.snp.top).offset(-12)
+            make.bottom.equalTo(guide).offset(-24)
             make.leading.trailing.equalTo(guide).inset(24)
         }
     }
@@ -142,5 +138,4 @@ final class CallUnreachableViewController: UIViewController {
 
     @objc private func tapClose() { router?.trigger(.backToHome) }
     @objc private func tapTryAgain() { router?.trigger(.retryCall(destinationIdentity: destinationIdentity)) }
-    @objc private func tapSendMessage() { router?.trigger(.openChat(peerName: callerName)) }
 }

@@ -49,8 +49,20 @@ public struct InfobipCallConfig {
     /// `customData` key names used to pass caller display info through a call.
     public var customDataKeys: CustomDataKeys
 
-    /// Visual theme for the built-in call UI.
+    /// Color-only theme for the built-in call UI. Kept for back-compat; prefer ``appearance`` for
+    /// full control (fonts, metrics, icons, gradient). When ``appearance`` is `nil`, the theme's
+    /// colors are used (with default fonts/metrics).
     public var theme: InfobipCallTheme
+
+    /// Full visual configuration (colors, fonts, metrics, icons, avatar). When `nil`, an appearance
+    /// is derived from ``theme`` for back-compat.
+    public var appearance: InfobipCallAppearance?
+
+    /// All user-facing strings for the built-in call screens (English defaults; override to localize).
+    public var strings: InfobipCallStrings
+
+    /// The effective appearance: explicit ``appearance`` if set, else derived from ``theme``.
+    public var resolvedAppearance: InfobipCallAppearance { appearance ?? InfobipCallAppearance(theme: theme) }
 
     /// When `true` (default), the framework prints `[InfobipCallKit][…]` debug logs to help hosts
     /// trace the calling flow. Logs are additionally compiled out of Release builds of the pod, so
@@ -61,6 +73,8 @@ public struct InfobipCallConfig {
         pushConfigId: String? = nil,
         customDataKeys: CustomDataKeys = .init(),
         theme: InfobipCallTheme = .default,
+        appearance: InfobipCallAppearance? = nil,
+        strings: InfobipCallStrings = .default,
         isLoggingEnabled: Bool = true,
         callKitDisplayName: String = "Call",
         callKitIconTemplateImageData: Data? = nil,
@@ -70,6 +84,8 @@ public struct InfobipCallConfig {
         self.pushConfigId = pushConfigId
         self.customDataKeys = customDataKeys
         self.theme = theme
+        self.appearance = appearance
+        self.strings = strings
         self.isLoggingEnabled = isLoggingEnabled
         self.callKitDisplayName = callKitDisplayName
         self.callKitIconTemplateImageData = callKitIconTemplateImageData

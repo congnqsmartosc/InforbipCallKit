@@ -7,9 +7,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDe
     var window: UIWindow?
     private var callCenter: InfobipCallCenter!
 
+    /// The Infobip WebRTC push-configuration id. Here we pass it to Infobip **at runtime** (via
+    /// `enablePushNotifications(credentials:pushConfigId:)`) instead of hardcoding it in
+    /// `InfobipCallConfig` — e.g. a real app might fetch it from remote config per environment.
+    private let pushConfigId = "1ce41cec-c13a-41b2-80dc-de54cf62d6bf"
+
     /// The host app owns the VoIP push registry (CallKit / APNs path). It gets the device token,
-    /// hands it to Infobip via `enablePushNotifications(credentials:)`, and hands each incoming
-    /// VoIP push to Infobip via `handleIncomingPush(payload:)`.
+    /// hands it to Infobip via `enablePushNotifications(credentials:pushConfigId:)`, and hands each
+    /// incoming VoIP push to Infobip via `handleIncomingPush(payload:)`.
     private var voipRegistry: PKPushRegistry?
 
     func scene(
@@ -24,9 +29,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, InfobipCallHostDe
         // 1. Create the call center with any config/theme, and install it on the host window.
         //    To enable CallKit + background/locked/killed calls, set `pushConfigId` (from the
         //    Infobip portal) — leave it nil to use the foreground InfobipSimulator dev path.
+        //    `enableCallKit: true` turns CallKit on without hardcoding pushConfigId here — the id is
+        //    supplied at runtime in the push-registry delegate below.
         callCenter = InfobipCallCenter(config: InfobipCallConfig(
-            pushConfigId: "1ce41cec-c13a-41b2-80dc-de54cf62d6bf",
-            callKitDisplayName: "CallKit Example"
+            callKitDisplayName: "CallKit Example",
+            enableCallKit: true
         ))
         callCenter.install(on: window)
         callCenter.hostDelegate = self
@@ -63,9 +70,10 @@ extension SceneDelegate: PKPushRegistryDelegate {
 
     func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
         guard type == .voIP else { return }
-        // Send the device token to Infobip so its server can send VoIP pushes. Safe to call before
-        // or after registerSubscriber(...); Infobip binds once both are available.
-        callCenter.client.enablePushNotifications(credentials: pushCredentials)
+        // Send the device token + the push-config id to Infobip so its server can send VoIP pushes.
+        // Passing pushConfigId here (instead of in InfobipCallConfig) lets the host choose it at
+        // runtime. Safe to call before or after registerSubscriber(...); Infobip binds once ready.
+        callCenter.client.enablePushNotifications(credentials: pushCredentials, pushConfigId: pushConfigId)
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
