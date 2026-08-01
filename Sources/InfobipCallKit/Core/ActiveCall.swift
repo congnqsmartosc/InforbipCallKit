@@ -240,7 +240,11 @@ final class ActiveCall: NSObject {
 
     private func emit(_ event: CallEvent) {
         DispatchQueue.main.async { [weak self] in
-            self?.observers.values.forEach { $0(event) }
+            guard let self = self else {
+                CallLog.debug("Attemp to invoke ActiveCall when it already deallocated")
+                return
+            }
+            self.observers.values.forEach { $0(event) }
         }
     }
 }
