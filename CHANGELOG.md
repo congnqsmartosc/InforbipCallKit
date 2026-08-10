@@ -4,6 +4,12 @@ All notable changes to **InfobipCallKit** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.2]
+
+### Changed
+- Bumped `InfobipRTC` dependency floor to `~> 2.6.11` (was `~> 2.6.9`), which bundles a newer
+  `IBGoogleWebRTC` core (`1.0.47486`, up from `1.0.44539`).
+
 ## [1.3.1]
 
 ### Added

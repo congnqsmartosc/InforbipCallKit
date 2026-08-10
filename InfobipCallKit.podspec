@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'InfobipCallKit'
-  s.version          = '1.4.1'
+  s.version          = '1.4.2'
   s.summary          = 'Drop-in WebRTC calling UI wrapping the Infobip RTC iOS SDK.'
   s.description      = <<-DESC
     InfobipCallKit packages a complete UIKit calling experience — incoming/outgoing call screens,
@@ -36,7 +36,7 @@ Pod::Spec.new do |s|
     }
     c.frameworks = 'UIKit', 'PushKit', 'CallKit', 'AVFoundation', 'AudioToolbox'
 
-    c.dependency 'InfobipRTC',   '~> 2.6.9'   # binary xcframework; bundles WebRTC on CocoaPods
+    c.dependency 'InfobipRTC',   '~> 2.6.11'   # binary xcframework; bundles WebRTC on CocoaPods
     c.dependency 'SnapKit',      '~> 5.6'     # covers client 5.6.0–5.7.1
     c.dependency 'SDWebImage',   '~> 5.21'    # covers client 5.21.x
     c.dependency 'XCoordinator', '~> 2.2'     # resolves 2.2.1; pulls RxSwift ~> 6.1
