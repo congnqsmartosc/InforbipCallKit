@@ -4,6 +4,17 @@ All notable changes to **InfobipCallKit** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.3]
+
+### Fixed
+- **Stuck in-call screen after a call answered and finished on the lock screen.** When an incoming
+  call was answered on CallKit while the app was killed/locked and ended before the app was
+  opened, opening the app showed a dead call screen (frozen timer, End button did nothing). An
+  ended call is no longer presented, and ending a call now always closes the screen: if the SDK
+  sends no confirmation within 3 seconds, the call is ended locally.
+- `registerSubscriber` now throws `InfobipCallError.invalidRegistration` for an empty identity or
+  token (previously `notRegistered`).
+
 ## [1.4.2]
 
 ### Changed
