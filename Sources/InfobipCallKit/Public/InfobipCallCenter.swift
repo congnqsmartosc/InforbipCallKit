@@ -106,6 +106,10 @@ public final class InfobipCallCenter {
     // Always invoked on the main thread (from the client's main-dispatched callbacks and its
     // `MainActor.run` outgoing path).
     private func present(_ call: ActiveCall, _ presentation: InfobipCallClientImpl.Presentation) {
+        guard !call.hasEnded else {
+            CallLog.debug("call already ended — not presenting", category: "Center")
+            return
+        }
         switch presentation {
         case .incomingBanner:
             showCallUI()
@@ -128,6 +132,11 @@ public final class InfobipCallCenter {
     @objc private func appDidBecomeActive() {
         guard let call = deferredAnsweredCall else { return }
         deferredAnsweredCall = nil
+        // Answered and finished on CallKit (lock screen / killed app) before the app became active.
+        guard !call.hasEnded else {
+            CallLog.debug("deferred answered call already ended — not presenting", category: "Center")
+            return
+        }
         showCallUI()
         coordinator.trigger(.freeCall(.incomingAnswered(call)))
     }

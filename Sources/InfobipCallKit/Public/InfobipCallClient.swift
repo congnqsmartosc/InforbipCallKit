@@ -4,6 +4,9 @@ import PushKit
 /// Errors surfaced by ``InfobipCallClient``.
 public enum InfobipCallError: LocalizedError {
     case notRegistered
+    /// `registerSubscriber` was called with an empty identity or token (distinct from "never
+    /// registered"). Carries which field was missing.
+    case invalidRegistration(String)
     case noActiveCall
     case microphonePermissionDenied
     case nothingToRetry
@@ -12,6 +15,8 @@ public enum InfobipCallError: LocalizedError {
         switch self {
         case .notRegistered:
             return "No subscriber registered. Call registerSubscriber(identity:displayName:token:) first."
+        case .invalidRegistration(let reason):
+            return "Cannot register subscriber: \(reason)."
         case .noActiveCall:
             return "There is no active call."
         case .microphonePermissionDenied:

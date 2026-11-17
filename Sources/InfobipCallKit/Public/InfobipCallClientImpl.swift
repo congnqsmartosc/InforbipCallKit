@@ -85,8 +85,9 @@ final class InfobipCallClientImpl: InfobipCallClient {
     // MARK: Subscriber
 
     func registerSubscriber(identity: String, displayName: String, token: String, imageURL: String?) async throws {
-        CallLog.debug("registerSubscriber(identity: \(identity), hasImage: \(imageURL != nil))", category: "Client")
-        guard !identity.isEmpty, !token.isEmpty else { throw InfobipCallError.notRegistered }
+        CallLog.debug("registerSubscriber(identity: \(identity), hasToken: \(!token.isEmpty), hasImage: \(imageURL != nil))", category: "Client")
+        guard !identity.isEmpty else { throw InfobipCallError.invalidRegistration("identity is empty") }
+        guard !token.isEmpty else { throw InfobipCallError.invalidRegistration("token is empty") }
         service.registerSubscriber(identity: identity, displayName: displayName, token: token, imageURL: imageURL)
     }
 

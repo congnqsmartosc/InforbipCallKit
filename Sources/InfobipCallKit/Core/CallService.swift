@@ -126,7 +126,14 @@ final class CallService: NSObject, CallServiceType {
     /// The push config id actually used with Infobip: the host's runtime value, else `config.pushConfigId`.
     private var effectivePushConfigId: String? { runtimePushConfigId ?? config.pushConfigId }
 
-    private(set) var subscriber: Subscriber?
+    /// `subscriber` is read/written from async executor threads (client API) AND the PushKit/CallKit
+    /// delegates (main), so guard it with a lock to avoid register/clear races and stale reads.
+    private let subscriberLock = NSLock()
+    private var _subscriber: Subscriber?
+    var subscriber: Subscriber? {
+        subscriberLock.lock(); defer { subscriberLock.unlock() }
+        return _subscriber
+    }
     var onIncomingCall: ((ActiveCall) -> Void)?
     var onCallAnswered: ((ActiveCall) -> Void)?
 
@@ -168,26 +175,34 @@ final class CallService: NSObject, CallServiceType {
     // MARK: - Subscriber
 
     func registerSubscriber(identity: String, displayName: String, token: String, imageURL: String?) {
-        subscriber = Subscriber(identity: identity, displayName: displayName, token: token, imageURL: imageURL)
+        subscriberLock.lock()
+        _subscriber = Subscriber(identity: identity, displayName: displayName, token: token, imageURL: imageURL)
+        subscriberLock.unlock()
         log("registered subscriber \(identity) displayName=\(displayName) hasImage=\(imageURL != nil)")
         // If a VoIP token already arrived before the subscriber was known, bind push now.
         enablePushIfPossible()
     }
 
     func updateToken(_ token: String) {
-        subscriber?.token = token
+        subscriberLock.lock()
+        _subscriber?.token = token
+        subscriberLock.unlock()
         log("token updated")
         enablePushIfPossible()
     }
 
     func clearSubscriber() {
-        if let token = subscriber?.token, effectivePushConfigId != nil {
+        subscriberLock.lock()
+        let token = _subscriber?.token
+        _subscriber = nil
+        subscriberLock.unlock()
+
+        if let token = token, effectivePushConfigId != nil {
             infobipRTC.disablePushNotification(token)
         }
         pushRegistry?.delegate = nil
         pushRegistry = nil
         pendingPushCredentials = nil
-        subscriber = nil
         // The InfobipRTC facade has no `disconnect()`; ending any active call is the valid teardown.
         infobipRTC.getActiveCall()?.hangup()
         log("cleared subscriber")

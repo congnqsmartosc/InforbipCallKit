@@ -62,6 +62,11 @@ final class FreeCallViewModel {
     // MARK: - Lifecycle
 
     func viewDidLoad() {
+        if call.hasEnded {
+            // Screen shown for a call that already finished — its hangup event will never arrive.
+            finish()
+            return
+        }
         if call.isEstablished {
             enterEstablished()
             return
@@ -94,6 +99,10 @@ final class FreeCallViewModel {
         didHangUpLocally = true
         if phase != .established {
             didCancelLocally = true
+        }
+        if call.hasEnded {
+            finish()
+            return
         }
         switch (call.direction, phase) {
         case (.incoming, .incoming):
@@ -183,6 +192,7 @@ final class FreeCallViewModel {
     }
 
     private func finish() {
+        guard phase != .ended else { return }
         let wasEstablished = phase == .established
         displayTimer?.invalidate()
         displayTimer = nil

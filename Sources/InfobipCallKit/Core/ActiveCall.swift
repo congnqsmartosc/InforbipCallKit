@@ -42,6 +42,8 @@ final class ActiveCall: NSObject {
     private let customData: [String: String]
     private let customDataKeys: InfobipCallConfig.CustomDataKeys
     private var observers: [UUID: (CallEvent) -> Void] = [:]
+    /// `observe` is called off the main thread (SDK callbacks, async contexts) while `emit` reads on main.
+    private let observersLock = NSLock()
 
     /// Cuộc gọi đến — giữ riêng để gọi accept()/decline().
     private var incomingCall: IncomingWebrtcCall? { call as? IncomingWebrtcCall }
@@ -199,11 +201,34 @@ final class ActiveCall: NSObject {
         // Mặc định (false) chỉ ngắt leg của máy này -> người gọi vẫn đổ chuông chờ
         // thiết bị khác cùng identity, tới khi NO_ANSWER.
         incomingCall?.decline(DeclineOptions(true))
+        scheduleEndWatchdog()
     }
 
     func hangup() {
         didUserRespond = true
         call?.hangup()
+        scheduleEndWatchdog()
+    }
+
+    // MARK: - Terminal state
+
+    /// Set once the call has ended (SDK hangup/error, or the local watchdog). Main thread only.
+    private(set) var endReason: CallEndReason?
+    var hasEnded: Bool { endReason != nil }
+
+    /// The user asked to end the call. If the SDK never confirms (call already finished on its
+    /// side, lost event…), end it locally so the UI / CallKit / host session can't get stuck.
+    private func scheduleEndWatchdog() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self = self, !self.hasEnded else { return }
+            CallLog.debug("no SDK hangup confirmation after 3s — ending call locally", category: "ActiveCall")
+            self.emit(.hangup(CallEndReason(
+                code: 10000,
+                name: "NORMAL_HANGUP",
+                message: "Ended locally (no SDK confirmation)",
+                isError: false
+            )))
+        }
     }
 
     func setMuted(_ muted: Bool) {
@@ -230,12 +255,16 @@ final class ActiveCall: NSObject {
     @discardableResult
     func observe(_ handler: @escaping (CallEvent) -> Void) -> UUID {
         let id = UUID()
+        observersLock.lock()
         observers[id] = handler
+        observersLock.unlock()
         return id
     }
 
     func removeObserver(_ id: UUID) {
+        observersLock.lock()
         observers.removeValue(forKey: id)
+        observersLock.unlock()
     }
 
     private func emit(_ event: CallEvent) {
@@ -244,7 +273,18 @@ final class ActiveCall: NSObject {
                 CallLog.debug("Attemp to invoke ActiveCall when it already deallocated")
                 return
             }
-            self.observers.values.forEach { $0(event) }
+            // The terminal event is recorded and delivered at most once.
+            switch event {
+            case .hangup(let reason), .error(let reason):
+                guard !self.hasEnded else { return }
+                self.endReason = reason
+            default:
+                break
+            }
+            self.observersLock.lock()
+            let handlers = Array(self.observers.values)
+            self.observersLock.unlock()
+            handlers.forEach { $0(event) }
         }
     }
 }
